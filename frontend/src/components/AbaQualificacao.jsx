@@ -22,7 +22,7 @@ const AbaQualificacao = () => {
     }
 
     try {
-      const response = await axios.post('http://127.0.0.1:8000/api/parceiros/qualificar_leads/', formData, {
+      const response = await axios.post('https://prevision-backend.onrender.com/api/parceiros/qualificar_leads/', formData, {
         responseType: 'blob',
       });
 

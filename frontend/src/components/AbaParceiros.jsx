@@ -16,7 +16,7 @@ const AbaParceiros = () => {
   }, []);
 
   const carregarParceiros = () => {
-    axios.get('http://127.0.0.1:8000/api/parceiros/')
+    axios.get('https://prevision-backend.onrender.com/api/parceiros/')
       .then(response => {
         setParceiros(response.data);
         setLoading(false);
@@ -40,7 +40,7 @@ const AbaParceiros = () => {
     if (pontos) {
       try {
         // Manda para o Django calcular
-        const response = await axios.post(`http://127.0.0.1:8000/api/parceiros/${parceiroSelecionado.id}/registrar_indicacao/`, {
+        const response = await axios.post(`https://prevision-backend.onrender.com/api/parceiros/${parceiroSelecionado.id}/registrar_indicacao/`, {
           pontos: pontos
         });
         

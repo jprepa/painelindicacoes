@@ -52,7 +52,7 @@ const ModalNovoParceiro = ({ aoFechar, aoSalvar }) => {
     };
 
     try {
-      const response = await axios.post('http://127.0.0.1:8000/api/parceiros/', dadosParaEnvio);
+      const response = await axios.post('https://prevision-backend.onrender.com/api/parceiros/', dadosParaEnvio);
       aoSalvar(response.data); // Devolve o novo parceiro para a tela principal
       aoFechar(); // Fecha a janela
     } catch (error) {
