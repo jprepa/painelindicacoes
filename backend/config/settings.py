@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/6.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
-
+import os # Caso não tenha importado lá no topo
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -44,18 +44,15 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
- 'django.middleware.security.SecurityMiddleware',
-    "whitenoise.middleware.WhiteNoiseMiddleware", # <--- Verifique se esta linha existe
+    'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',     # Para seus arquivos estáticos no Render
     'django.contrib.sessions.middleware.SessionMiddleware',
-     'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',          # <--- O LUGAR EXATO É AQUI (Antes do Common)
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-        'corsheaders.middleware.CorsMiddleware', # <--- Adicione aqui
-    'django.middleware.security.SecurityMiddleware',
-    
 ]
 
 
@@ -133,6 +130,6 @@ CORS_ALLOW_ALL_ORIGINS = True
 STATIC_URL = 'static/'
 
 # --- ADICIONE ESTAS DUAS LINHAS ABAIXO ---
-import os # Caso não tenha importado lá no topo
+
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
