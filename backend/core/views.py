@@ -9,8 +9,8 @@ from rest_framework.response import Response
 from .models import Parceiro
 from .serializers import ParceiroSerializer
 
-# --- IMPORTANTE: Importe a função que criamos no services.py ---
-from .services import buscar_cnpjs_pipedrive 
+# --- ATENÇÃO: Importe a função nova (que retorna dados_por_cnpj, dados_por_nome) ---
+from .services import buscar_dados_pipedrive 
 
 # DDDs para desempate
 DDD_ESTADOS = {
@@ -27,7 +27,7 @@ class ParceiroViewSet(viewsets.ModelViewSet):
     def registrar_indicacao(self, request, pk=None):
         pass
 
-    # --- AGENTE DE LEADS 3.0 (Com Pipedrive + Upload de Base + Google + BrasilAPI) ---
+    # --- AGENTE DE LEADS 5.0 (Com Links + Contato + Double Check) ---
     @action(detail=False, methods=['post'])
     def qualificar_leads(self, request):
         # 1. Recebe os arquivos
@@ -38,17 +38,18 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             return Response({"erro": "Arquivo de leads não enviado"}, status=400)
 
         # ---------------------------------------------------------
-        # NOVO: CONSULTA O PIPEDRIVE (Carrega tudo na memória antes)
+        # 1. CARREGA O PIPEDRIVE (Agora pega 2 dicionários completos)
         # ---------------------------------------------------------
         TOKEN_PIPEDRIVE = "952556ce51a1938462a38091c1ea9dfb38b8351c" # Seu Token
-        print("--- Consultando Pipedrive (Negócios em Aberto) ---")
+        print("--- Consultando Pipedrive (Negócios + Links) ---")
         
-        # Chama a função do services.py e guarda os CNPJs num conjunto (set)
-        cnpjs_em_aberto_crm = buscar_cnpjs_pipedrive(TOKEN_PIPEDRIVE)
-        print(f"Pipedrive carregado: {len(cnpjs_em_aberto_crm)} negócios em aberto encontrados.")
+        # Chama a função nova que retorna CNPJ e NOME separadamente
+        crm_por_cnpj, crm_por_nome = buscar_dados_pipedrive(TOKEN_PIPEDRIVE)
+        
+        print(f"Pipedrive carregado: {len(crm_por_cnpj)} CNPJs e {len(crm_por_nome)} Nomes indexados.")
         # ---------------------------------------------------------
 
-        # 2. Processa a Base de Clientes (Arquivo manual, se enviado)
+        # 2. Processa a Base de Clientes (Arquivo manual)
         set_clientes_cnpjs = set()
         if file_clientes:
             try:
@@ -56,9 +57,9 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 indice_coluna = 1 if len(df_cli.columns) > 1 else 0
                 coluna_cnpjs = df_cli.iloc[:, indice_coluna].astype(str)
                 set_clientes_cnpjs = set(coluna_cnpjs.apply(lambda x: re.sub(r'\D', '', x)))
-                print(f"Base manual de clientes carregada: {len(set_clientes_cnpjs)} registros.")
+                print(f"Base manual carregada: {len(set_clientes_cnpjs)} registros.")
             except Exception as e:
-                print(f"Erro ao ler base de clientes manual: {e}")
+                print(f"Erro base manual: {e}")
 
         # 3. Lê os Leads
         try:
@@ -67,7 +68,7 @@ class ParceiroViewSet(viewsets.ModelViewSet):
              return Response({"erro": "Arquivo de leads inválido"}, status=400)
 
         if len(df.columns) < 5:
-            return Response({"erro": "Planilha de leads fora do padrão (Min 5 colunas)"}, status=400)
+            return Response({"erro": "Planilha fora do padrão (Min 5 colunas)"}, status=400)
             
         coluna_empresa = df.columns[4] # Coluna E
         coluna_telefone = df.columns[2] # Coluna C
@@ -77,10 +78,10 @@ class ParceiroViewSet(viewsets.ModelViewSet):
         headers_serper = {'X-API-KEY': API_KEY, 'Content-Type': 'application/json'}
         url_search = "https://google.serper.dev/search"
 
-        print("--- Iniciando Qualificação Linha a Linha ---")
+        print("--- Iniciando Qualificação ---")
 
         for index, row in df.iterrows():
-            empresa = str(row[coluna_empresa])
+            empresa_nome = str(row[coluna_empresa]).strip()
             telefone_bruto = str(row[coluna_telefone])
             
             # --- BUSCA CNPJ NO GOOGLE ---
@@ -91,7 +92,7 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             estado_lead = DDD_ESTADOS.get(ddd_lead, "")
 
             try:
-                payload = json.dumps({"q": f"{empresa} CNPJ", "num": 5})
+                payload = json.dumps({"q": f"{empresa_nome} CNPJ", "num": 5})
                 response = requests.post(url_search, headers=headers_serper, data=payload)
                 results = response.json().get("organic", [])
                 
@@ -108,9 +109,8 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 if candidatos:
                     candidatos.sort(key=lambda x: x['score'], reverse=True)
                     cnpj_final = candidatos[0]['cnpj']
-                    cnpj_numeros = re.sub(r'\D', '', cnpj_final) # Limpa pontos e traços
-            except:
-                pass
+                    cnpj_numeros = re.sub(r'\D', '', cnpj_final)
+            except: pass
 
             # --- CONSULTA BRASIL API ---
             atividade_principal = "Não verificada"
@@ -128,7 +128,6 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                         lista_sec = dados_cnpj.get('cnaes_secundarios', [])
                         descricoes_sec = [item.get('descricao', '') for item in lista_sec]
                         atividades_secundarias = "; ".join(descricoes_sec)
-                        
                         if len(atividades_secundarias) > 3000:
                             atividades_secundarias = atividades_secundarias[:3000] + "..."
                     else:
@@ -137,31 +136,52 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                     atividade_principal = "Erro API"
 
             # ---------------------------------------------------------
-            # VERIFICAÇÕES DE CLIENTE E CRM
+            # NOVA LÓGICA DE VALIDAÇÃO CRM (COM LINKS E CONTATO)
             # ---------------------------------------------------------
+            status_crm = "Disponível"
+            contato_crm = ""
+            links_crm = "" # Coluna nova para o Link
             
-            # 1. Verifica na planilha manual de clientes
-            ja_e_cliente = "NÃO"
-            if cnpj_numeros and cnpj_numeros in set_clientes_cnpjs:
-                ja_e_cliente = "SIM - JÁ NA BASE (Arquivo)"
+            lista_matches = [] # Vai guardar os dados se achar
 
-            # 2. NOVO: Verifica no PIPEDRIVE
-            status_crm = "Disponível" # Padrão
-            if cnpj_numeros and cnpj_numeros in cnpjs_em_aberto_crm:
-                status_crm = "EM ABERTO (Duplicado)"
+            # 1. Tenta pelo CNPJ (Prioridade Alta)
+            if cnpj_numeros and cnpj_numeros in crm_por_cnpj:
+                lista_matches = crm_por_cnpj[cnpj_numeros]
+                status_crm = "EM ABERTO (Match CNPJ)"
+            
+            # 2. Se falhar, tenta pelo NOME (Prioridade Baixa)
+            elif empresa_nome.lower() in crm_por_nome:
+                lista_matches = crm_por_nome[empresa_nome.lower()]
+                status_crm = "EM ABERTO (Match Nome)"
+
+            # Se encontrou matches (seja por nome ou CNPJ), processa os dados
+            if lista_matches:
+                # Pega nomes de contato únicos (usando set) e junta com vírgula
+                nomes_encontrados = {item['contato'] for item in lista_matches}
+                contato_crm = ", ".join(nomes_encontrados)
+                
+                # Pega todos os links e junta com separador " | "
+                urls_encontradas = [item['link'] for item in lista_matches]
+                links_crm = " | ".join(urls_encontradas)
+
+            # Verifica Manual (Base de Clientes enviada)
+            status_cliente = "NÃO"
+            if cnpj_numeros and cnpj_numeros in set_clientes_cnpjs:
+                status_cliente = "SIM - JÁ NA BASE (Arquivo)"
+
             # ---------------------------------------------------------
 
             # --- SITE e TIPOLOGIA ---
             site_final = "Não encontrado"
             try:
-                payload = json.dumps({"q": f"{empresa} site oficial construtora", "num": 1})
+                payload = json.dumps({"q": f"{empresa_nome} site oficial construtora", "num": 1})
                 response = requests.post(url_search, headers=headers_serper, data=payload)
                 if response.json().get("organic"):
                     site_final = response.json().get("organic")[0].get("link")
             except: pass
 
             tipologia = "nao_identificado"
-            texto_analise = (empresa + " " + site_final + " " + atividade_principal).lower()
+            texto_analise = (empresa_nome + " " + site_final + " " + atividade_principal).lower()
             if any(x in texto_analise for x in ['lote', 'bairro', 'urbanismo', 'horizontal']): tipologia = "loteamento_ou_horizontais"
             elif any(x in texto_analise for x in ['edific', 'tower', 'residencial', 'incorp']): tipologia = "residencial_vertical"
             elif any(x in texto_analise for x in ['industria', 'galpao', 'logist']): tipologia = "industrial"
@@ -173,11 +193,13 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             df.at[index, 'Site'] = site_final
             df.at[index, 'Tipologia'] = tipologia
             
-            # Colunas de validação
-            df.at[index, 'Status Cliente'] = ja_e_cliente
-            df.at[index, 'Status CRM'] = status_crm # <--- COLUNA NOVA AQUI
+            # Colunas de validação e CRM
+            df.at[index, 'Status Cliente'] = status_cliente
+            df.at[index, 'Status CRM'] = status_crm
+            df.at[index, 'Contato no CRM'] = contato_crm  # <--- COLUNA NOVA
+            df.at[index, 'Link Card Pipedrive'] = links_crm # <--- COLUNA NOVA
 
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = 'attachment; filename=leads_qualificados_pipedrive.xlsx'
+        response['Content-Disposition'] = 'attachment; filename=leads_qualificados_links.xlsx'
         df.to_excel(response, index=False)
         return response
