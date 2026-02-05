@@ -1,12 +1,22 @@
 from rest_framework import serializers
-from .models import Parceiro
+from .models import Parceiro, HistoricoPontuacao
+
+class HistoricoSerializer(serializers.ModelSerializer):
+    data_formatada = serializers.SerializerMethodField()
+
+    class Meta:
+        model = HistoricoPontuacao
+        fields = ['id', 'tipo', 'pontos', 'data_formatada', 'descricao']
+
+    def get_data_formatada(self, obj):
+        return obj.data.strftime('%d/%m/%Y')
 
 class ParceiroSerializer(serializers.ModelSerializer):
-    # Avisa que esses campos são calculados na hora (não salvos no banco)
-    dias_sem_indicar = serializers.ReadOnlyField()
-    multa_estimada = serializers.ReadOnlyField()
-    score_futuro = serializers.ReadOnlyField()
-    servicos_lista = serializers.SerializerMethodField()
+    servicos_lista = serializers.ReadOnlyField()
+    estados_lista = serializers.ReadOnlyField() # NOVO
+    status = serializers.ReadOnlyField()
+    # Traz o histórico aninhado
+    historico = HistoricoSerializer(many=True, read_only=True) 
 
     class Meta:
         model = Parceiro
