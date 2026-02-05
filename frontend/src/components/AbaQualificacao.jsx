@@ -52,7 +52,7 @@ const AbaQualificacao = () => {
         
         <h1 className="text-2xl font-bold text-gray-800 mb-2">Agente de Qualificação R&E</h1>
         <p className="text-gray-500 mb-8">
-          Cruza dados da web (CNPJ, CNAE, Site) e verifica duplicidade com base de clientes.
+          Cruza dados da web e verifica duplicidade com base de clientes/CRM.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
