@@ -2,42 +2,34 @@ import pandas as pd
 import requests
 import json
 import re
+from decimal import Decimal
 from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import Parceiro
+from .models import Parceiro, HistoricoPontuacao
 from .serializers import ParceiroSerializer
 from .services import buscar_dados_pipedrive 
 
-# DDDs para desempate
+# --- CONFIGURAÇÕES ---
+TOKEN_PIPEDRIVE = "952556ce51a1938462a38091c1ea9dfb38b8351c"
+API_KEY_SERPER = "5857e258a648118c2bc2d3c11f27ec1c54126b96"
+
 DDD_ESTADOS = {
     '11': 'SP', '12': 'SP', '13': 'SP', '19': 'SP', '21': 'RJ', '22': 'RJ', '24': 'RJ',
     '31': 'MG', '32': 'MG', '41': 'PR', '42': 'SC', '43': 'RS', '47': 'SC', '48': 'SC',
     '51': 'RS', '61': 'DF', '62': 'GO', '71': 'BA', '81': 'PE', '91': 'PA'
 }
 
-# --- FUNÇÕES DE LIMPEZA E CNPJ ---
+# --- FUNÇÕES AUXILIARES ---
 def limpar_valor_paranoico(valor):
-    """
-    Remove notação científica (1.23E+13), pontos, traços e espaços.
-    Retorna apenas os números em formato string.
-    """
     if pd.isna(valor): return ""
     s_val = str(valor).strip()
-    
-    # Se tiver "E+" ou "e+" (Notação Científica), tenta converter float -> int -> str
-    if 'E' in s_val.upper():
-        try:
-            # Converte '1.23E+13' para float, depois int para tirar .0, depois str
-            s_val = '{:.0f}'.format(float(s_val))
-        except:
-            pass # Se der erro, segue a vida
-            
-    # Remove .0 no final se sobrar
+    if 'E' in s_val.upper(): # Notação científica
+        try: s_val = '{:.0f}'.format(float(s_val))
+        except: pass
     if s_val.endswith('.0'): s_val = s_val[:-2]
-    
-    # Remove tudo que não for dígito
     return re.sub(r'\D', '', s_val)
 
 def calcular_digito(cnpj_parcial):
@@ -48,57 +40,54 @@ def calcular_digito(cnpj_parcial):
     return '0' if resto < 2 else str(11 - resto)
 
 def garantir_cnpj_matriz(cnpj_sujo):
-    # Limpa
     cnpj_limpo = limpar_valor_paranoico(cnpj_sujo)
-    cnpj_limpo = cnpj_limpo.zfill(14) # Garante tamanho minimo
-    
+    cnpj_limpo = cnpj_limpo.zfill(14)
     if len(cnpj_limpo) < 8: return ""
-
     raiz = cnpj_limpo[:8]
     cnpj_sem_dv = raiz + "0001"
     dv1 = calcular_digito(cnpj_sem_dv)
     dv2 = calcular_digito(cnpj_sem_dv + dv1)
     return cnpj_sem_dv + dv1 + dv2
-# ---------------------------------
 
+# --- VIEWSET PRINCIPAL ---
 class ParceiroViewSet(viewsets.ModelViewSet):
     queryset = Parceiro.objects.all().order_by('-score_atual')
     serializer_class = ParceiroSerializer
 
-@action(detail=True, methods=['post'])
+    # --- AÇÃO 1: REGISTRAR PONTOS (CORRIGIDA) ---
+    @action(detail=True, methods=['post'])
     def registrar_indicacao(self, request, pk=None):
         parceiro = self.get_object()
         
-        # Pega os dados enviados pelo React
-        pontos = request.data.get('pontos')
-        tipo = request.data.get('tipo', 'Indicação') # Se não mandar, assume Indicação
-        
-        if not pontos:
-            return Response({"erro": "Pontos obrigatórios"}, status=400)
+        try:
+            pontos_str = request.data.get('pontos')
+            tipo = request.data.get('tipo', 'Indicação') # Padrão: Indicação
+            
+            if not pontos_str:
+                return Response({"erro": "Pontos não informados"}, status=400)
 
-        # 1. Cria o registro no histórico
-        HistoricoPontuacao.objects.create(
-            parceiro=parceiro,
-            tipo=tipo,
-            pontos=pontos,
-            descricao=f"Lançamento manual via painel"
-        )
+            pontos_decimal = Decimal(str(pontos_str))
 
-        # 2. Atualiza o Score do Parceiro
-        from decimal import Decimal
-        parceiro.score_atual += Decimal(str(pontos))
-        
-        # Atualiza a data da última indicação
-        from django.utils import timezone
-        parceiro.ultima_indicacao = timezone.now().date()
-        
-        parceiro.save()
+            # 1. Cria histórico
+            HistoricoPontuacao.objects.create(
+                parceiro=parceiro,
+                tipo=tipo,
+                pontos=pontos_decimal,
+                descricao="Lançamento via Painel"
+            )
 
-        # Retorna o parceiro atualizado com o novo histórico
-        serializer = self.get_serializer(parceiro)
-        return Response(serializer.data)
+            # 2. Atualiza Parceiro
+            parceiro.score_atual += pontos_decimal
+            parceiro.ultima_indicacao = timezone.now().date()
+            parceiro.save() # O .save() já chama a lógica de calcular Nível (Ouro/Prata/etc)
 
-    # --- AGENTE DE LEADS 9.0 (CSI MODE: Paranóico + Logs) ---
+            serializer = self.get_serializer(parceiro)
+            return Response(serializer.data)
+
+        except Exception as e:
+            return Response({"erro": str(e)}, status=500)
+
+    # --- AÇÃO 2: AGENTE DE LEADS 10.0 (COMPLETA) ---
     @action(detail=False, methods=['post'])
     def qualificar_leads(self, request):
         file_leads = request.FILES.get('file')
@@ -106,79 +95,51 @@ class ParceiroViewSet(viewsets.ModelViewSet):
 
         if not file_leads: return Response({"erro": "Arquivo de leads não enviado"}, status=400)
 
-        # 1. PIPEDRIVE
-        TOKEN_PIPEDRIVE = "952556ce51a1938462a38091c1ea9dfb38b8351c"
-        print(">>> 1. Carregando Pipedrive...")
+        # 1. CARREGA PIPEDRIVE
+        print("--- Consultando Pipedrive ---")
         crm_por_cnpj, crm_por_nome = buscar_dados_pipedrive(TOKEN_PIPEDRIVE)
-        print(f"    CRM OK: {len(crm_por_cnpj)} CNPJs carregados.")
-
-        # 2. BASE DE CLIENTES (COM LOGS VISUAIS)
+        
+        # 2. CARREGA CLIENTES (MODO PARANÓICO)
         set_clientes_cnpjs = set()
         if file_clientes:
             try:
-                print(">>> 2. Lendo Base de Clientes (Modo Paranóico)...")
-                # header=None para ler tudo, até cabeçalho, como dado
                 df_cli = pd.read_excel(file_clientes, header=None)
-                
                 valores = df_cli.values.flatten()
-                amostra_log = [] # Para mostrar no terminal
-
                 for val in valores:
-                    # Limpeza bruta
                     numeros = limpar_valor_paranoico(val)
-                    
-                    # Filtra lixo (só aceita CPF/CNPJ possíveis)
                     if 8 <= len(numeros) <= 14:
-                        # Zfill garante zeros a esquerda. Pega os 8 primeiros (Raiz)
                         raiz = numeros.zfill(14)[:8]
                         set_clientes_cnpjs.add(raiz)
-                        
-                        if len(amostra_log) < 5: amostra_log.append(f"{val} -> {raiz}")
-                
-                print(f"    Base Clientes Carregada: {len(set_clientes_cnpjs)} raízes únicas.")
-                print(f"    AMOSTRA (Como o código leu seus dados):")
-                for item in amostra_log: print(f"      {item}")
-                print("    ------------------------------------------------")
-
-            except Exception as e:
-                print(f"!!! ERRO NA LEITURA CLIENTES: {e}")
+                print(f"Base Clientes: {len(set_clientes_cnpjs)} raízes.")
+            except Exception as e: print(f"Erro Base Clientes: {e}")
 
         # 3. LEADS
         try: df = pd.read_excel(file_leads)
         except: return Response({"erro": "Arquivo inválido"}, status=400)
         
+        # Garante colunas mínimas
+        if len(df.columns) < 5: return Response({"erro": "Colunas insuficientes"}, status=400)
+
         coluna_empresa = df.columns[4] 
         coluna_telefone = df.columns[2]
         
-        API_KEY = "5857e258a648118c2bc2d3c11f27ec1c54126b96"
-        headers_serper = {'X-API-KEY': API_KEY, 'Content-Type': 'application/json'}
+        headers_serper = {'X-API-KEY': API_KEY_SERPER, 'Content-Type': 'application/json'}
         url_search = "https://google.serper.dev/search"
-
-        print(">>> 3. Iniciando Qualificação...")
 
         for index, row in df.iterrows():
             empresa_nome = str(row[coluna_empresa]).strip()
             telefone_bruto = str(row[coluna_telefone])
             
-            # --- BUSCA GOOGLE (Mantém lógica de matriz) ---
-# ... (código anterior: definição de empresa_nome, telefone_bruto, etc) ...
-
-            # --- BUSCA GOOGLE (AGENTE 10.0: Busca Direcionada por Estado) ---
+            # --- BUSCA GOOGLE (AGENTE 10.0) ---
             cnpj_matriz_final = ""
-            
-            # 1. Descobre o Estado pelo DDD
             ddd_lead = ''.join(filter(str.isdigit, telefone_bruto))[:2]
             estado_lead = DDD_ESTADOS.get(ddd_lead, "")
 
             try:
-                # --- AQUI ESTÁ A MUDANÇA ---
-                # Monta a busca: "Nome Empresa + CNPJ + Estado"
-                termo_busca = f"{empresa_nome} CNPJ"
-                if estado_lead:
-                    termo_busca += f" {estado_lead}" # Adiciona " SP", " RJ", etc.
+                termo = f"{empresa_nome} CNPJ"
+                if estado_lead: termo += f" {estado_lead}"
                 
-                # Manda para o Google (Serper)
-                payload = json.dumps({"q": termo_busca, "num": 5})
+                payload = json.dumps({"q": termo, "num": 5})
                 response = requests.post(url_search, headers=headers_serper, data=payload)
                 results = response.json().get("organic", [])
                 
@@ -186,35 +147,20 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 for res in results:
                     texto = (res.get("title", "") + " " + res.get("snippet", "")).upper()
                     achados = re.findall(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}', texto)
-                    
                     for c_achado in achados:
-                        # Converte Filial -> Matriz
                         c_convertido = garantir_cnpj_matriz(c_achado)
-                        
                         score = 0
-                        # Pontuação extra
                         if "CONSTRU" in texto or "ENGENHARIA" in texto: score += 2
-                        
-                        # Se o estado apareceu no texto, ganha MAIS pontos ainda
-                        if estado_lead and estado_lead in texto: score += 5 
-                        
+                        if estado_lead and estado_lead in texto: score += 5
                         candidatos.append({'cnpj': c_convertido, 'score': score})
 
                 if candidatos:
-                    # Pega o com maior score
                     candidatos.sort(key=lambda x: x['score'], reverse=True)
                     cnpj_matriz_final = candidatos[0]['cnpj']
-                    
-            except Exception as e:
-                # Opcional: printar erro se quiser debugar
-                # print(f"Erro busca Google: {e}")
-                pass
-            
-            # ... (continua para Brasil API igual antes) ...
+            except: pass
 
             # --- BRASIL API ---
-            atividade = "Não verificada"
-            secundarias = ""
+            atividade, secundarias = "Não verificada", ""
             if cnpj_matriz_final:
                 try:
                     url_brasil = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj_matriz_final}"
@@ -228,11 +174,7 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 except: pass
 
             # --- VALIDAÇÕES ---
-            status_crm = "Disponível"
-            contato_crm = ""
-            links_crm = ""
-            status_cliente = "NÃO"
-            debug_match = "" # Log para ver erros
+            status_crm, contato_crm, links_crm, status_cliente = "Disponível", "", "", "NÃO"
 
             if cnpj_matriz_final:
                 # CRM
@@ -242,25 +184,16 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                     contato_crm = ", ".join({m['contato'] for m in matches})
                     links_crm = " | ".join([m['link'] for m in matches])
                 
-                # CLIENTES (COMPARACAO RAIZ vs RAIZ)
-                raiz_lead = cnpj_matriz_final[:8] # 8 digitos
-                
-                if raiz_lead in set_clientes_cnpjs:
+                # CLIENTES
+                if cnpj_matriz_final[:8] in set_clientes_cnpjs:
                     status_cliente = "SIM - JÁ NA BASE"
-                    debug_match = "MATCH!"
-                else:
-                    debug_match = f"SEM MATCH ({raiz_lead} nao ta no set)"
 
-            # Fallback CRM Nome
+            # Fallback Nome
             if status_crm == "Disponível" and empresa_nome.lower() in crm_por_nome:
                 matches = crm_por_nome[empresa_nome.lower()]
                 status_crm = "EM ABERTO (Match Nome)"
                 contato_crm = ", ".join({m['contato'] for m in matches})
                 links_crm = " | ".join([m['link'] for m in matches])
-
-            # LOG TEMPORÁRIO NO TERMINAL PARA VOCÊ CONFERIR
-            if cnpj_matriz_final:
-                print(f"  > {empresa_nome[:20]}... | CNPJ Achado: {cnpj_matriz_final} | Raiz: {cnpj_matriz_final[:8]} | Cliente? {status_cliente}")
 
             # --- SITE e TIPOLOGIA ---
             site_final = "Não encontrado"
@@ -287,6 +220,6 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             df.at[index, 'Link Card Pipedrive'] = links_crm
 
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = 'attachment; filename=leads_csi.xlsx'
+        response['Content-Disposition'] = 'attachment; filename=leads_qualificados_v10.xlsx'
         df.to_excel(response, index=False)
         return response
