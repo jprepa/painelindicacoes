@@ -54,6 +54,99 @@ class ParceiroViewSet(viewsets.ModelViewSet):
     queryset = Parceiro.objects.all().order_by('-score_atual')
     serializer_class = ParceiroSerializer
 
+    # ... dentro da classe ParceiroViewSet ...
+
+    @action(detail=False, methods=['post'])
+    def importar_excel(self, request):
+        arquivo = request.FILES.get('file')
+        if not arquivo:
+            return Response({"erro": "Nenhum arquivo enviado."}, status=400)
+
+        try:
+            # Lê o Excel e remove espaços em branco dos nomes das colunas
+            df = pd.read_excel(arquivo)
+            # Remove espaços antes/depois dos nomes das colunas e coloca tudo em MAIÚSCULO para facilitar a busca
+            df.columns = df.columns.str.strip().str.upper()
+            
+            criados = 0
+            atualizados = 0
+
+            # MAPA DE COLUNAS (Da sua Planilha) -> PARA NOME NO SISTEMA
+            # A chave é como está no Excel (MAIÚSCULO PARCIAL), o valor é como salvamos no banco
+            MAPA_SERVICOS = {
+                "PLANEJAMENTO DE PROJETOS": "Planejamento de Projetos/Incorporação",
+                "ESTUDO DE VIABILIDADE": "Estudo de Viabilidade",
+                "ORÇAMENTO": "Orçamento",
+                "PLANEJAMENTO": "Planejamento",
+                "MONITORAMENTO": "Monitoramento e Controle", # Pega parcial "MONITORAMENTO E CONTROLE"
+                "GERENCIAMENTO DE OBRA": "Gerenciamento de Obra",
+                "CONSULTORIA": "Consultoria",
+                "CURSOS": "Cursos",
+                "BIM": "BIM",
+                "MENTORIA": "Mentoria Lean",
+                "GESTÃO DE PESSOAS": "Gestão de Pessoas",
+                "PROJETOS COMPLE": "Projetos Complementares",
+                "QUALIDADE": "Qualidade",
+                "GERENCIAMENTO DE PROJETO": "Gerenciamento de Projeto/Contrato",
+                "GERENCIAMENTO FISICO": "Gerenciamento Físico-Financeiro",
+                "SUSTENTÁVEIS": "Soluções Sustentáveis"
+            }
+
+            for _, row in df.iterrows():
+                try:
+                    # 1. Dados Básicos (Usando .get para não quebrar se a coluna mudar um pouco)
+                    nome_empresa = str(row.get("EMPRESA", "")).strip()
+                    if not nome_empresa or nome_empresa == "nan": continue
+
+                    contato = str(row.get("CONTATO", "")).strip()
+                    if contato == "nan": contato = "Não informado"
+
+                    # Tenta pegar "AREA DE ATUAÇÃO" ou "AREA DE ATUACAO" ou "ESTADO"
+                    area_atuacao = str(row.get("AREA DE ATUAÇÃO", row.get("AREA DE ATUACAO", row.get("ESTADO", "")))).strip()
+                    if area_atuacao == "nan": area_atuacao = ""
+
+                    # Cidade (tenta pegar de ENDEREÇO ou CIDADE)
+                    cidade = str(row.get("CIDADE", row.get("ENDEREÇO", ""))).strip()
+                    if cidade == "nan": cidade = ""
+
+                    # 2. Processa os Serviços (Varre as colunas e marca o que tem 'X')
+                    servicos_encontrados = []
+                    
+                    # Para cada coluna do Excel, verifica se bate com nosso mapa
+                    for col_excel in df.columns:
+                        for chave_mapa, nome_sistema in MAPA_SERVICOS.items():
+                            if chave_mapa in col_excel: # Ex: "ORÇAMENTO" está dentro de "ORÇAMENTO (R$)"
+                                valor_celula = str(row[col_excel]).lower()
+                                # Se tiver 'x', 's', 'sim' ou qualquer coisa preenchida que não seja 'nan' ou '-'
+                                if valor_celula not in ['nan', '', '-', 'no', 'nao']:
+                                    if nome_sistema not in servicos_encontrados:
+                                        servicos_encontrados.append(nome_sistema)
+
+                    servicos_str = ", ".join(servicos_encontrados)
+
+                    # 3. Salva no Banco
+                    obj, created = Parceiro.objects.update_or_create(
+                        empresa=nome_empresa,
+                        defaults={
+                            "contato_nome": contato,
+                            "estados_atuacao": area_atuacao,
+                            "cidade": cidade,
+                            "servicos": servicos_str
+                        }
+                    )
+
+                    if created: criados += 1
+                    else: atualizados += 1
+
+                except Exception as loop_erro:
+                    print(f"Pulei a linha {nome_empresa}: {loop_erro}")
+                    continue
+
+            return Response({"mensagem": f"Sucesso! {criados} novos parceiros, {atualizados} atualizados."})
+
+        except Exception as e:
+            return Response({"erro": str(e)}, status=500)
+
     # --- AÇÃO 1: REGISTRAR PONTOS (CORRIGIDA) ---
     @action(detail=True, methods=['post'])
     def registrar_indicacao(self, request, pk=None):
