@@ -91,17 +91,32 @@ class ParceiroViewSet(viewsets.ModelViewSet):
         crm_por_cnpj, crm_por_nome = buscar_dados_pipedrive(TOKEN_PIPEDRIVE)
         print(f"CRM Indexado: {len(crm_por_cnpj)} CNPJs.")
 
-        # 2. Processa a Base de Clientes (Manual)
+    # 2. Processa a Base de Clientes (Manual)
         set_clientes_cnpjs = set()
         if file_clientes:
             try:
-                df_cli = pd.read_excel(file_clientes)
+                # dtype=str força ler tudo como texto para não perder zeros, mas nem sempre funciona 100% no Excel
+                df_cli = pd.read_excel(file_clientes, dtype=str)
+                
+                # Pega a coluna certa (B ou A)
                 idx = 1 if len(df_cli.columns) > 1 else 0
-                col = df_cli.iloc[:, idx].astype(str)
-                # Guarda apenas a raiz do CNPJ (8 dígitos) para comparar matriz com filial se precisar
-                set_clientes_cnpjs = set(col.apply(lambda x: re.sub(r'\D', '', x)[:8]))
+                
+                # --- A CORREÇÃO MÁGICA ---
+                # 1. Converte para string
+                # 2. Remove o ".0" se o Excel tiver transformado em float (ex: 12345.0)
+                # 3. Remove tudo que não é número
+                # 4. Preenche com Zeros à esquerda até ter 14 dígitos (zfill)
+                # 5. Só aí pega a raiz [:8]
+                set_clientes_cnpjs = set(
+                    df_cli.iloc[:, idx]
+                    .astype(str)
+                    .apply(lambda x: re.sub(r'\.0$', '', x)) # Remove .0 final de floats
+                    .apply(lambda x: re.sub(r'\D', '', x))   # Limpa traços/pontos
+                    .apply(lambda x: x.zfill(14)[:8])        # Garante 14 digitos e pega raiz
+                )
                 print(f"Base manual: {len(set_clientes_cnpjs)} raízes carregadas.")
-            except: pass
+            except Exception as e:
+                print(f"Erro base manual: {e}")
 
         # 3. Lê Leads
         try: df = pd.read_excel(file_leads)
