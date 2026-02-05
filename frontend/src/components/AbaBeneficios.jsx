@@ -102,19 +102,7 @@ const AbaBeneficios = () => {
                 </p>
             </div>
 
-            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-                <h4 className="font-bold text-gray-800 mb-2">Plano Premium</h4>
-                <p className="text-sm text-gray-500">
-                    Todos os parceiros recebem acesso ao Plano Premium e ganham +3 meses de plataforma a cada venda realizada.
-                </p>
-            </div>
-
-            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-                <h4 className="font-bold text-gray-800 mb-2">Desconto Cliente</h4>
-                <p className="text-sm text-gray-500">
-                    Seu cliente ganha desconto no MRR recorrente: <strong>5% (Bronze)</strong> ou <strong>10% (Prata+)</strong>.
-                </p>
-            </div>
+        
         </div>
 
       </div>
