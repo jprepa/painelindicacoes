@@ -132,12 +132,24 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             telefone_bruto = str(row[coluna_telefone])
             
             # --- BUSCA GOOGLE (Mantém lógica de matriz) ---
+# ... (código anterior: definição de empresa_nome, telefone_bruto, etc) ...
+
+            # --- BUSCA GOOGLE (AGENTE 10.0: Busca Direcionada por Estado) ---
             cnpj_matriz_final = ""
+            
+            # 1. Descobre o Estado pelo DDD
             ddd_lead = ''.join(filter(str.isdigit, telefone_bruto))[:2]
             estado_lead = DDD_ESTADOS.get(ddd_lead, "")
 
             try:
-                payload = json.dumps({"q": f"{empresa_nome} CNPJ", "num": 5})
+                # --- AQUI ESTÁ A MUDANÇA ---
+                # Monta a busca: "Nome Empresa + CNPJ + Estado"
+                termo_busca = f"{empresa_nome} CNPJ"
+                if estado_lead:
+                    termo_busca += f" {estado_lead}" # Adiciona " SP", " RJ", etc.
+                
+                # Manda para o Google (Serper)
+                payload = json.dumps({"q": termo_busca, "num": 5})
                 response = requests.post(url_search, headers=headers_serper, data=payload)
                 results = response.json().get("organic", [])
                 
@@ -145,17 +157,31 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 for res in results:
                     texto = (res.get("title", "") + " " + res.get("snippet", "")).upper()
                     achados = re.findall(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}', texto)
+                    
                     for c_achado in achados:
-                        c_convertido = garantir_cnpj_matriz(c_achado) # Vira matriz
+                        # Converte Filial -> Matriz
+                        c_convertido = garantir_cnpj_matriz(c_achado)
+                        
                         score = 0
+                        # Pontuação extra
                         if "CONSTRU" in texto or "ENGENHARIA" in texto: score += 2
-                        if estado_lead and estado_lead in texto: score += 3
+                        
+                        # Se o estado apareceu no texto, ganha MAIS pontos ainda
+                        if estado_lead and estado_lead in texto: score += 5 
+                        
                         candidatos.append({'cnpj': c_convertido, 'score': score})
 
                 if candidatos:
+                    # Pega o com maior score
                     candidatos.sort(key=lambda x: x['score'], reverse=True)
                     cnpj_matriz_final = candidatos[0]['cnpj']
-            except: pass
+                    
+            except Exception as e:
+                # Opcional: printar erro se quiser debugar
+                # print(f"Erro busca Google: {e}")
+                pass
+            
+            # ... (continua para Brasil API igual antes) ...
 
             # --- BRASIL API ---
             atividade = "Não verificada"
