@@ -65,9 +65,38 @@ class ParceiroViewSet(viewsets.ModelViewSet):
     queryset = Parceiro.objects.all().order_by('-score_atual')
     serializer_class = ParceiroSerializer
 
-    @action(detail=True, methods=['post'])
+@action(detail=True, methods=['post'])
     def registrar_indicacao(self, request, pk=None):
-        pass
+        parceiro = self.get_object()
+        
+        # Pega os dados enviados pelo React
+        pontos = request.data.get('pontos')
+        tipo = request.data.get('tipo', 'Indicação') # Se não mandar, assume Indicação
+        
+        if not pontos:
+            return Response({"erro": "Pontos obrigatórios"}, status=400)
+
+        # 1. Cria o registro no histórico
+        HistoricoPontuacao.objects.create(
+            parceiro=parceiro,
+            tipo=tipo,
+            pontos=pontos,
+            descricao=f"Lançamento manual via painel"
+        )
+
+        # 2. Atualiza o Score do Parceiro
+        from decimal import Decimal
+        parceiro.score_atual += Decimal(str(pontos))
+        
+        # Atualiza a data da última indicação
+        from django.utils import timezone
+        parceiro.ultima_indicacao = timezone.now().date()
+        
+        parceiro.save()
+
+        # Retorna o parceiro atualizado com o novo histórico
+        serializer = self.get_serializer(parceiro)
+        return Response(serializer.data)
 
     # --- AGENTE DE LEADS 9.0 (CSI MODE: Paranóico + Logs) ---
     @action(detail=False, methods=['post'])
