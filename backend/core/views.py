@@ -16,7 +16,7 @@ from .services import buscar_cnpjs_pipedrive
 def sua_funcao_do_agente(request):
     # 1. Busca tudo do Pipedrive ANTES de ler a planilha
     # (Coloque seu token aqui ou no settings.py)
-    TOKEN_PIPEDRIVE = "seu_token_aqui"
+    TOKEN_PIPEDRIVE = "952556ce51a1938462a38091c1ea9dfb38b8351c"
     
     print("Consultando Pipedrive...")
     lista_negocios_abertos = buscar_cnpjs_pipedrive(TOKEN_PIPEDRIVE)
