@@ -8,6 +8,32 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Parceiro
 from .serializers import ParceiroSerializer
+# No topo do arquivo views.py
+from .services import buscar_cnpjs_pipedrive
+
+# ... dentro da sua função do agente ...
+
+def sua_funcao_do_agente(request):
+    # 1. Busca tudo do Pipedrive ANTES de ler a planilha
+    # (Coloque seu token aqui ou no settings.py)
+    TOKEN_PIPEDRIVE = "seu_token_aqui"
+    
+    print("Consultando Pipedrive...")
+    lista_negocios_abertos = buscar_cnpjs_pipedrive(TOKEN_PIPEDRIVE)
+    
+    # 2. Agora começa a ler a planilha
+    # ... código que lê o excel ...
+    
+    for linha in planilha:
+        cnpj_da_planilha = linha['cnpj'] # (lembre de limpar esse cnpj tb)
+        
+        if cnpj_da_planilha in lista_negocios_abertos:
+            print(f"Opa! O CNPJ {cnpj_da_planilha} já tem negócio aberto!")
+            status = "Em Aberto no CRM"
+        else:
+            status = "Disponível"
+            
+        # ... continua sua lógica ...
 
 # DDDs para desempate
 DDD_ESTADOS = {
