@@ -1,54 +1,81 @@
 import requests
 
-def buscar_cnpjs_pipedrive(api_token):
+def buscar_dados_pipedrive(api_token):
     """
-    Busca todos os negócios em aberto no Pipedrive e retorna
-    uma lista de CNPJs limpos para verificação rápida.
+    Retorna dicionários com LISTAS de negócios, incluindo o LINK direto para o card.
+    Ex: {'1234...': [{'contato': 'João', 'link': 'https://.../deal/10'}]}
     """
-    # URL da API de Deals (Negócios)
-    url = "https://api.pipedrive.com/v1/deals"
+    # 1. Primeiro, descobre o seu domínio (ex: 'prevision.pipedrive.com')
+    try:
+        resp_user = requests.get("https://api.pipedrive.com/v1/users/me", params={'api_token': api_token})
+        domain = resp_user.json().get('data', {}).get('company_domain', 'app')
+    except:
+        domain = 'app' # Fallback se falhar
     
-    # --- PREENCHA AQUI ---
-    # O hash do campo personalizado onde você guarda o CNPJ no Pipedrive
-    CAMPO_CNPJ_HASH = '18e8111634bc53a7bb1cee2f27638df164a4dff0' 
-    # ---------------------
+    url_deals = "https://api.pipedrive.com/v1/deals"
+    
+    # --- SEU HASH DO CAMPO CNPJ (Confira se é este mesmo!) ---
+    CAMPO_CNPJ_HASH = '39fa8d7e6f5c4b3a21908...' 
+    # ---------------------------------------------------------
 
-    cnpjs_em_aberto = set()
+    dados_por_cnpj = {}
+    dados_por_nome = {}
+    
     start = 0
     limit = 500 
 
     while True:
         params = {
             'api_token': api_token,
-            'status': 'open', # Só pega o que está em aberto
+            'status': 'open',
             'start': start,
             'limit': limit,
         }
 
         try:
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status() # Avisa se der erro 400/500
-            
+            response = requests.get(url_deals, params=params, timeout=10)
             data = response.json().get('data')
-            
-            if not data:
-                break 
+            if not data: break 
 
             for deal in data:
-                # Pega o valor usando o código do campo
-                cnpj = deal.get(CAMPO_CNPJ_HASH)
+                # Dados básicos
+                deal_id = deal.get('id')
+                # MONTA O LINK DO CARD
+                link_card = f"https://{domain}.pipedrive.com/deal/{deal_id}"
                 
-                if cnpj:
-                    # Limpa pontos e traços para comparar fácil depois
-                    cnpj_limpo = str(cnpj).replace('.', '').replace('/', '').replace('-', '').strip()
-                    cnpjs_em_aberto.add(cnpj_limpo)
+                nome_org = "Sem Nome"
+                if deal.get('org_id'): nome_org = deal['org_id'].get('name', 'Sem Nome')
+                
+                nome_pessoa = "Sem Contato"
+                if deal.get('person_id'): nome_pessoa = deal['person_id'].get('name', 'Sem Contato')
+
+                # Pacote com Link
+                info = {
+                    'id': deal_id,
+                    'nome_crm': nome_org,
+                    'contato': nome_pessoa,
+                    'link': link_card
+                }
+
+                # --- Lógica de Lista (Append) para CNPJ ---
+                cnpj_raw = deal.get(CAMPO_CNPJ_HASH)
+                if cnpj_raw:
+                    c_limpo = str(cnpj_raw).replace('.', '').replace('/', '').replace('-', '').strip()
+                    if c_limpo:
+                        if c_limpo not in dados_por_cnpj: dados_por_cnpj[c_limpo] = []
+                        dados_por_cnpj[c_limpo].append(info)
+
+                # --- Lógica de Lista (Append) para Nome ---
+                n_limpo = nome_org.lower().strip()
+                if n_limpo:
+                    if n_limpo not in dados_por_nome: dados_por_nome[n_limpo] = []
+                    dados_por_nome[n_limpo].append(info)
 
             start += limit
-            if len(data) < limit:
-                break
+            if len(data) < limit: break
                 
         except Exception as e:
-            print(f"Erro ao conectar no Pipedrive: {e}")
+            print(f"Erro Pipedrive: {e}")
             break
             
-    return cnpjs_em_aberto
+    return dados_por_cnpj, dados_por_nome
