@@ -8,8 +8,6 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Parceiro
 from .serializers import ParceiroSerializer
-
-# Importa o services atualizado
 from .services import buscar_dados_pipedrive 
 
 # DDDs para desempate
@@ -19,25 +17,40 @@ DDD_ESTADOS = {
     '51': 'RS', '61': 'DF', '62': 'GO', '71': 'BA', '81': 'PE', '91': 'PA'
 }
 
-# --- FUNÇÕES AUXILIARES DE CNPJ ---
+# --- FUNÇÕES DE LIMPEZA E CNPJ ---
+def limpar_valor_paranoico(valor):
+    """
+    Remove notação científica (1.23E+13), pontos, traços e espaços.
+    Retorna apenas os números em formato string.
+    """
+    if pd.isna(valor): return ""
+    s_val = str(valor).strip()
+    
+    # Se tiver "E+" ou "e+" (Notação Científica), tenta converter float -> int -> str
+    if 'E' in s_val.upper():
+        try:
+            # Converte '1.23E+13' para float, depois int para tirar .0, depois str
+            s_val = '{:.0f}'.format(float(s_val))
+        except:
+            pass # Se der erro, segue a vida
+            
+    # Remove .0 no final se sobrar
+    if s_val.endswith('.0'): s_val = s_val[:-2]
+    
+    # Remove tudo que não for dígito
+    return re.sub(r'\D', '', s_val)
+
 def calcular_digito(cnpj_parcial):
-    """Calcula um dígito verificador do CNPJ (Algoritmo Módulo 11)"""
     tamanho = len(cnpj_parcial)
-    if tamanho == 12:
-        pesos = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-    else:
-        pesos = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-    soma = 0
-    for i, digito in enumerate(cnpj_parcial):
-        soma += int(digito) * pesos[i]
+    pesos = [5,4,3,2,9,8,7,6,5,4,3,2] if tamanho == 12 else [6,5,4,3,2,9,8,7,6,5,4,3,2]
+    soma = sum(int(d) * pesos[i] for i, d in enumerate(cnpj_parcial))
     resto = soma % 11
     return '0' if resto < 2 else str(11 - resto)
 
 def garantir_cnpj_matriz(cnpj_sujo):
-    """Recebe filial ou matriz, retorna sempre a MATRIZ (0001) com DV recalculado."""
-    cnpj_limpo = re.sub(r'\D', '', str(cnpj_sujo))
-    # Se faltar zero a esquerda vindo do Google (raro, mas possível), ajusta
-    cnpj_limpo = cnpj_limpo.zfill(14) 
+    # Limpa
+    cnpj_limpo = limpar_valor_paranoico(cnpj_sujo)
+    cnpj_limpo = cnpj_limpo.zfill(14) # Garante tamanho minimo
     
     if len(cnpj_limpo) < 8: return ""
 
@@ -45,9 +58,8 @@ def garantir_cnpj_matriz(cnpj_sujo):
     cnpj_sem_dv = raiz + "0001"
     dv1 = calcular_digito(cnpj_sem_dv)
     dv2 = calcular_digito(cnpj_sem_dv + dv1)
-    
     return cnpj_sem_dv + dv1 + dv2
-# ----------------------------------
+# ---------------------------------
 
 class ParceiroViewSet(viewsets.ModelViewSet):
     queryset = Parceiro.objects.all().order_by('-score_atual')
@@ -57,7 +69,7 @@ class ParceiroViewSet(viewsets.ModelViewSet):
     def registrar_indicacao(self, request, pk=None):
         pass
 
-    # --- AGENTE DE LEADS 7.0 (Blindado: Zeros + Coluna Inteligente + Matriz) ---
+    # --- AGENTE DE LEADS 9.0 (CSI MODE: Paranóico + Logs) ---
     @action(detail=False, methods=['post'])
     def qualificar_leads(self, request):
         file_leads = request.FILES.get('file')
@@ -65,58 +77,61 @@ class ParceiroViewSet(viewsets.ModelViewSet):
 
         if not file_leads: return Response({"erro": "Arquivo de leads não enviado"}, status=400)
 
-        # 1. CARREGA PIPEDRIVE
-        TOKEN_PIPEDRIVE = "952556ce51a1938462a38091c1ea9dfb38b8351c" 
-        print("--- Consultando Pipedrive ---")
+        # 1. PIPEDRIVE
+        TOKEN_PIPEDRIVE = "952556ce51a1938462a38091c1ea9dfb38b8351c"
+        print(">>> 1. Carregando Pipedrive...")
         crm_por_cnpj, crm_por_nome = buscar_dados_pipedrive(TOKEN_PIPEDRIVE)
-        print(f"CRM Indexado: {len(crm_por_cnpj)} CNPJs.")
+        print(f"    CRM OK: {len(crm_por_cnpj)} CNPJs carregados.")
 
-        # 2. PROCESSA BASE DE CLIENTES (COM CORREÇÃO DE ZEROS E COLUNA)
+        # 2. BASE DE CLIENTES (COM LOGS VISUAIS)
         set_clientes_cnpjs = set()
         if file_clientes:
             try:
-                # Lê forçando texto para não perder dados
-                df_cli = pd.read_excel(file_clientes, dtype=str)
+                print(">>> 2. Lendo Base de Clientes (Modo Paranóico)...")
+                # header=None para ler tudo, até cabeçalho, como dado
+                df_cli = pd.read_excel(file_clientes, header=None)
                 
-                # --- Lógica Inteligente de Coluna ---
-                coluna_alvo = df_cli.columns[0] # Padrão: Coluna A
-                for col in df_cli.columns:
-                    # Procura por "CNPJ" ou "CPF" no cabeçalho
-                    if "CNPJ" in str(col).upper() or "CPF" in str(col).upper():
-                        coluna_alvo = col
-                        break
-                
-                print(f"Lendo Clientes da coluna: {coluna_alvo}")
-                
-                # Pega a coluna e aplica a blindagem (zfill)
-                set_clientes_cnpjs = set(
-                    df_cli[coluna_alvo].astype(str)
-                    .apply(lambda x: re.sub(r'\.0$', '', x)) # Remove .0
-                    .apply(lambda x: re.sub(r'\D', '', x))   # Remove traços
-                    .apply(lambda x: x.zfill(14)[:8])        # <--- O SEGREDO: Preenche zeros e pega raiz
-                )
-                set_clientes_cnpjs.discard('') 
-                print(f"Base Clientes: {len(set_clientes_cnpjs)} raízes carregadas.")
-            except Exception as e:
-                print(f"Erro Base Clientes: {e}")
+                valores = df_cli.values.flatten()
+                amostra_log = [] # Para mostrar no terminal
 
-        # 3. LÊ OS LEADS
+                for val in valores:
+                    # Limpeza bruta
+                    numeros = limpar_valor_paranoico(val)
+                    
+                    # Filtra lixo (só aceita CPF/CNPJ possíveis)
+                    if 8 <= len(numeros) <= 14:
+                        # Zfill garante zeros a esquerda. Pega os 8 primeiros (Raiz)
+                        raiz = numeros.zfill(14)[:8]
+                        set_clientes_cnpjs.add(raiz)
+                        
+                        if len(amostra_log) < 5: amostra_log.append(f"{val} -> {raiz}")
+                
+                print(f"    Base Clientes Carregada: {len(set_clientes_cnpjs)} raízes únicas.")
+                print(f"    AMOSTRA (Como o código leu seus dados):")
+                for item in amostra_log: print(f"      {item}")
+                print("    ------------------------------------------------")
+
+            except Exception as e:
+                print(f"!!! ERRO NA LEITURA CLIENTES: {e}")
+
+        # 3. LEADS
         try: df = pd.read_excel(file_leads)
         except: return Response({"erro": "Arquivo inválido"}, status=400)
-        if len(df.columns) < 5: return Response({"erro": "Colunas insuficientes"}, status=400)
-            
+        
         coluna_empresa = df.columns[4] 
         coluna_telefone = df.columns[2]
-
+        
         API_KEY = "5857e258a648118c2bc2d3c11f27ec1c54126b96"
         headers_serper = {'X-API-KEY': API_KEY, 'Content-Type': 'application/json'}
         url_search = "https://google.serper.dev/search"
+
+        print(">>> 3. Iniciando Qualificação...")
 
         for index, row in df.iterrows():
             empresa_nome = str(row[coluna_empresa]).strip()
             telefone_bruto = str(row[coluna_telefone])
             
-            # --- BUSCA E FORÇA MATRIZ ---
+            # --- BUSCA GOOGLE (Mantém lógica de matriz) ---
             cnpj_matriz_final = ""
             ddd_lead = ''.join(filter(str.isdigit, telefone_bruto))[:2]
             estado_lead = DDD_ESTADOS.get(ddd_lead, "")
@@ -130,15 +145,12 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 for res in results:
                     texto = (res.get("title", "") + " " + res.get("snippet", "")).upper()
                     achados = re.findall(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}', texto)
-                    
-                    for cnpj_achado in achados:
-                        # Converte Filial -> Matriz
-                        cnpj_convertido = garantir_cnpj_matriz(cnpj_achado)
-                        
+                    for c_achado in achados:
+                        c_convertido = garantir_cnpj_matriz(c_achado) # Vira matriz
                         score = 0
                         if "CONSTRU" in texto or "ENGENHARIA" in texto: score += 2
                         if estado_lead and estado_lead in texto: score += 3
-                        candidatos.append({'cnpj': cnpj_convertido, 'score': score})
+                        candidatos.append({'cnpj': c_convertido, 'score': score})
 
                 if candidatos:
                     candidatos.sort(key=lambda x: x['score'], reverse=True)
@@ -160,11 +172,12 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                     else: atividade = "CNPJ não encontrado na Base"
                 except: pass
 
-            # --- VALIDAÇÕES FINAIS ---
+            # --- VALIDAÇÕES ---
             status_crm = "Disponível"
             contato_crm = ""
             links_crm = ""
             status_cliente = "NÃO"
+            debug_match = "" # Log para ver erros
 
             if cnpj_matriz_final:
                 # CRM
@@ -174,25 +187,32 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                     contato_crm = ", ".join({m['contato'] for m in matches})
                     links_crm = " | ".join([m['link'] for m in matches])
                 
-                # CLIENTES (Compara Raízes: 8 dígitos)
-                raiz_encontrada = cnpj_matriz_final[:8]
-                if raiz_encontrada in set_clientes_cnpjs:
+                # CLIENTES (COMPARACAO RAIZ vs RAIZ)
+                raiz_lead = cnpj_matriz_final[:8] # 8 digitos
+                
+                if raiz_lead in set_clientes_cnpjs:
                     status_cliente = "SIM - JÁ NA BASE"
+                    debug_match = "MATCH!"
+                else:
+                    debug_match = f"SEM MATCH ({raiz_lead} nao ta no set)"
 
-            # Fallback CRM por Nome
+            # Fallback CRM Nome
             if status_crm == "Disponível" and empresa_nome.lower() in crm_por_nome:
                 matches = crm_por_nome[empresa_nome.lower()]
                 status_crm = "EM ABERTO (Match Nome)"
                 contato_crm = ", ".join({m['contato'] for m in matches})
                 links_crm = " | ".join([m['link'] for m in matches])
 
+            # LOG TEMPORÁRIO NO TERMINAL PARA VOCÊ CONFERIR
+            if cnpj_matriz_final:
+                print(f"  > {empresa_nome[:20]}... | CNPJ Achado: {cnpj_matriz_final} | Raiz: {cnpj_matriz_final[:8]} | Cliente? {status_cliente}")
+
             # --- SITE e TIPOLOGIA ---
             site_final = "Não encontrado"
             try:
                 p_site = json.dumps({"q": f"{empresa_nome} site oficial", "num": 1})
                 r_site = requests.post(url_search, headers=headers_serper, data=p_site)
-                if r_site.json().get("organic"):
-                    site_final = r_site.json().get("organic")[0].get("link")
+                if r_site.json().get("organic"): site_final = r_site.json().get("organic")[0].get("link")
             except: pass
 
             tipologia = "nao_identificado"
@@ -201,7 +221,6 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             elif any(x in txt for x in ['edific', 'residencial', 'incorp']): tipologia = "vertical"
             elif any(x in txt for x in ['industria', 'galpao']): tipologia = "industrial"
 
-            # Salva
             df.at[index, 'CNPJ Encontrado'] = cnpj_matriz_final
             df.at[index, 'Atividade Principal'] = atividade
             df.at[index, 'Atividades Secundarias'] = secundarias
@@ -213,6 +232,6 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             df.at[index, 'Link Card Pipedrive'] = links_crm
 
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = 'attachment; filename=leads_qualificados_final.xlsx'
+        response['Content-Disposition'] = 'attachment; filename=leads_csi.xlsx'
         df.to_excel(response, index=False)
         return response
