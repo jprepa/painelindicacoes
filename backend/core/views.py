@@ -8,32 +8,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Parceiro
 from .serializers import ParceiroSerializer
-# No topo do arquivo views.py
-from .services import buscar_cnpjs_pipedrive
 
-# ... dentro da sua função do agente ...
-
-def sua_funcao_do_agente(request):
-    # 1. Busca tudo do Pipedrive ANTES de ler a planilha
-    # (Coloque seu token aqui ou no settings.py)
-    TOKEN_PIPEDRIVE = "952556ce51a1938462a38091c1ea9dfb38b8351c"
-    
-    print("Consultando Pipedrive...")
-    lista_negocios_abertos = buscar_cnpjs_pipedrive(TOKEN_PIPEDRIVE)
-    
-    # 2. Agora começa a ler a planilha
-    # ... código que lê o excel ...
-    
-    for linha in planilha:
-        cnpj_da_planilha = linha['cnpj'] # (lembre de limpar esse cnpj tb)
-        
-        if cnpj_da_planilha in lista_negocios_abertos:
-            print(f"Opa! O CNPJ {cnpj_da_planilha} já tem negócio aberto!")
-            status = "Em Aberto no CRM"
-        else:
-            status = "Disponível"
-            
-        # ... continua sua lógica ...
+# --- IMPORTANTE: Importe a função que criamos no services.py ---
+from .services import buscar_cnpjs_pipedrive 
 
 # DDDs para desempate
 DDD_ESTADOS = {
@@ -50,30 +27,38 @@ class ParceiroViewSet(viewsets.ModelViewSet):
     def registrar_indicacao(self, request, pk=None):
         pass
 
-    # --- AGENTE DE LEADS 3.0 (Com Upload de Base de Clientes) ---
+    # --- AGENTE DE LEADS 3.0 (Com Pipedrive + Upload de Base + Google + BrasilAPI) ---
     @action(detail=False, methods=['post'])
     def qualificar_leads(self, request):
-        # 1. Recebe os DOIS arquivos
+        # 1. Recebe os arquivos
         file_leads = request.FILES.get('file')
-        file_clientes = request.FILES.get('file_clientes') # Novo arquivo opcional
+        file_clientes = request.FILES.get('file_clientes') 
 
         if not file_leads:
             return Response({"erro": "Arquivo de leads não enviado"}, status=400)
 
-        # 2. Processa a Base de Clientes (se enviada)
+        # ---------------------------------------------------------
+        # NOVO: CONSULTA O PIPEDRIVE (Carrega tudo na memória antes)
+        # ---------------------------------------------------------
+        TOKEN_PIPEDRIVE = "952556ce51a1938462a38091c1ea9dfb38b8351c" # Seu Token
+        print("--- Consultando Pipedrive (Negócios em Aberto) ---")
+        
+        # Chama a função do services.py e guarda os CNPJs num conjunto (set)
+        cnpjs_em_aberto_crm = buscar_cnpjs_pipedrive(TOKEN_PIPEDRIVE)
+        print(f"Pipedrive carregado: {len(cnpjs_em_aberto_crm)} negócios em aberto encontrados.")
+        # ---------------------------------------------------------
+
+        # 2. Processa a Base de Clientes (Arquivo manual, se enviado)
         set_clientes_cnpjs = set()
         if file_clientes:
             try:
                 df_cli = pd.read_excel(file_clientes)
-                # Pega a Coluna B (índice 1). Se tiver só 1 coluna, pega a A (índice 0)
                 indice_coluna = 1 if len(df_cli.columns) > 1 else 0
-                
-                # Converte para string, limpa não-números e guarda num SET (para busca rápida)
                 coluna_cnpjs = df_cli.iloc[:, indice_coluna].astype(str)
                 set_clientes_cnpjs = set(coluna_cnpjs.apply(lambda x: re.sub(r'\D', '', x)))
-                print(f"Base de clientes carregada: {len(set_clientes_cnpjs)} registros.")
+                print(f"Base manual de clientes carregada: {len(set_clientes_cnpjs)} registros.")
             except Exception as e:
-                print(f"Erro ao ler base de clientes: {e}")
+                print(f"Erro ao ler base de clientes manual: {e}")
 
         # 3. Lê os Leads
         try:
@@ -87,12 +72,12 @@ class ParceiroViewSet(viewsets.ModelViewSet):
         coluna_empresa = df.columns[4] # Coluna E
         coluna_telefone = df.columns[2] # Coluna C
 
-        # SUA CHAVE AQUI (Lembre de colocar a chave real!)
+        # SUA CHAVE DO SERPER
         API_KEY = "5857e258a648118c2bc2d3c11f27ec1c54126b96" 
         headers_serper = {'X-API-KEY': API_KEY, 'Content-Type': 'application/json'}
         url_search = "https://google.serper.dev/search"
 
-        print("--- Iniciando Qualificação ---")
+        print("--- Iniciando Qualificação Linha a Linha ---")
 
         for index, row in df.iterrows():
             empresa = str(row[coluna_empresa])
@@ -123,13 +108,13 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 if candidatos:
                     candidatos.sort(key=lambda x: x['score'], reverse=True)
                     cnpj_final = candidatos[0]['cnpj']
-                    cnpj_numeros = re.sub(r'\D', '', cnpj_final)
+                    cnpj_numeros = re.sub(r'\D', '', cnpj_final) # Limpa pontos e traços
             except:
                 pass
 
-            # --- CONSULTA BRASIL API (CNAE Primário e Secundários) ---
+            # --- CONSULTA BRASIL API ---
             atividade_principal = "Não verificada"
-            atividades_secundarias = "" # Nova variável
+            atividades_secundarias = ""
             
             if cnpj_numeros:
                 try:
@@ -140,13 +125,10 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                         dados_cnpj = resp_cnpj.json()
                         atividade_principal = dados_cnpj.get('cnae_fiscal_descricao', 'Não informado')
                         
-                        # Processa Secundários
                         lista_sec = dados_cnpj.get('cnaes_secundarios', [])
-                        # Pega apenas a descrição de cada item e junta com "; "
                         descricoes_sec = [item.get('descricao', '') for item in lista_sec]
                         atividades_secundarias = "; ".join(descricoes_sec)
                         
-                        # Limita tamanho se for gigante (Excel tem limite de célula, mas 32k caracteres é bastante)
                         if len(atividades_secundarias) > 3000:
                             atividades_secundarias = atividades_secundarias[:3000] + "..."
                     else:
@@ -154,12 +136,22 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 except:
                     atividade_principal = "Erro API"
 
-            # --- VERIFICA SE JÁ É CLIENTE (Comparando com o arquivo enviado) ---
+            # ---------------------------------------------------------
+            # VERIFICAÇÕES DE CLIENTE E CRM
+            # ---------------------------------------------------------
+            
+            # 1. Verifica na planilha manual de clientes
             ja_e_cliente = "NÃO"
             if cnpj_numeros and cnpj_numeros in set_clientes_cnpjs:
-                ja_e_cliente = "SIM - JÁ NA BASE"
+                ja_e_cliente = "SIM - JÁ NA BASE (Arquivo)"
 
-            # --- SITE e TIPOLOGIA (Mantidos) ---
+            # 2. NOVO: Verifica no PIPEDRIVE
+            status_crm = "Disponível" # Padrão
+            if cnpj_numeros and cnpj_numeros in cnpjs_em_aberto_crm:
+                status_crm = "EM ABERTO (Duplicado)"
+            # ---------------------------------------------------------
+
+            # --- SITE e TIPOLOGIA ---
             site_final = "Não encontrado"
             try:
                 payload = json.dumps({"q": f"{empresa} site oficial construtora", "num": 1})
@@ -174,15 +166,18 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             elif any(x in texto_analise for x in ['edific', 'tower', 'residencial', 'incorp']): tipologia = "residencial_vertical"
             elif any(x in texto_analise for x in ['industria', 'galpao', 'logist']): tipologia = "industrial"
 
-            # --- SALVA ---
+            # --- SALVA TUDO NO DATAFRAME ---
             df.at[index, 'CNPJ Encontrado'] = cnpj_final
             df.at[index, 'Atividade Principal'] = atividade_principal
-            df.at[index, 'Atividades Secundarias'] = atividades_secundarias # NOVA COLUNA
+            df.at[index, 'Atividades Secundarias'] = atividades_secundarias
             df.at[index, 'Site'] = site_final
             df.at[index, 'Tipologia'] = tipologia
+            
+            # Colunas de validação
             df.at[index, 'Status Cliente'] = ja_e_cliente
+            df.at[index, 'Status CRM'] = status_crm # <--- COLUNA NOVA AQUI
 
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = 'attachment; filename=leads_qualificados_v3.xlsx'
+        response['Content-Disposition'] = 'attachment; filename=leads_qualificados_pipedrive.xlsx'
         df.to_excel(response, index=False)
         return response
