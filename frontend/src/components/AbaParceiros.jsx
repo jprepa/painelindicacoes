@@ -136,10 +136,10 @@ const AbaParceiros = () => {
   const getProgresso = (score) => {
     const s = parseFloat(score || 0);
     const niveis = { bronze: 1.7, prata: 2.4, ouro: 3.4, diamante: 6.1 };
-    if (s < niveis.bronze) return { pct: (s/1.7)*100, label: `Faltam ${(1.7-s).toFixed(1)} para Bronze` };
-    if (s < niveis.prata) return { pct: ((s-1.7)/(2.4-1.7))*100, label: `Faltam ${(2.4-s).toFixed(1)} para Prata` };
-    if (s < niveis.ouro) return { pct: ((s-2.4)/(3.4-2.4))*100, label: `Faltam ${(3.4-s).toFixed(1)} para Ouro` };
-    if (s < niveis.diamante) return { pct: ((s-3.4)/(6.1-3.4))*100, label: `Faltam ${(6.1-s).toFixed(1)} para Diamante` };
+    if (s < niveis.bronze) return { pct: (s/1.7)*100, label: `Faltam ${(1.7-s).toFixed(1)} pontos para o Bronze` };
+    if (s < niveis.prata) return { pct: ((s-1.7)/(2.4-1.7))*100, label: `Faltam ${(2.4-s).toFixed(1)} pontos para o Prata` };
+    if (s < niveis.ouro) return { pct: ((s-2.4)/(3.4-2.4))*100, label: `Faltam ${(3.4-s).toFixed(1)} pontos para o Ouro` };
+    if (s < niveis.diamante) return { pct: ((s-3.4)/(6.1-3.4))*100, label: `Faltam ${(6.1-s).toFixed(1)} pontos para o Diamante` };
     return { pct: 100, label: "Topo Alcançado!" };
   };
 
@@ -216,7 +216,7 @@ const AbaParceiros = () => {
                 </div>
                 <div className="flex flex-col items-end gap-3">
                   <div className="text-right">
-                    <p className="text-xs text-gray-400 uppercase font-bold tracking-widest">Score (90 Dias)</p>
+                    <p className="text-xs text-gray-400 uppercase font-bold tracking-widest">Score</p>
                     <p className="text-5xl font-extrabold text-blue-600 tracking-tighter">{parceiroSelecionado.score_atual}</p>
                   </div>
                   <div className="flex gap-2">
@@ -247,7 +247,7 @@ const AbaParceiros = () => {
                         <p className="text-xs text-orange-600 font-bold mt-1">Pontos vão expirar em breve</p>
                      </div>
                      <div className="text-right bg-red-50 px-3 py-2 rounded-lg border border-red-100">
-                        <p className="text-xs text-red-400 font-bold uppercase">A perder</p>
+                        <p className="text-xs text-red-400 font-bold uppercase">Desconto</p>
                         <p className="text-xl font-bold text-red-600">-{parceiroSelecionado.vencimento_info.pontos} pts</p>
                      </div>
                    </div>
@@ -261,7 +261,7 @@ const AbaParceiros = () => {
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><History size={18} className="text-purple-500"/> Histórico de Pontuação</h3>
+                <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><History size={18} className="text-purple-500"/> Histórico de Atividades</h3>
                 <div className="overflow-hidden rounded-lg border border-gray-100">
                     <table className="w-full text-sm text-left text-gray-500">
                         <thead className="text-xs text-gray-700 uppercase bg-gray-50"><tr><th className="px-4 py-3">Data</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3 text-right">Pontos</th></tr></thead>
@@ -275,7 +275,7 @@ const AbaParceiros = () => {
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><CheckCircle size={18} className="text-gray-400"/> Serviços Habilitados</h3>
+              <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><CheckCircle size={18} className="text-gray-400"/> Serviços Prestados</h3>
               <div className="flex flex-wrap gap-2">
                 {parceiroSelecionado.servicos_lista && parceiroSelecionado.servicos_lista.length > 0 ? (parceiroSelecionado.servicos_lista.map((servico) => (<div key={servico} className="px-3 py-2 rounded-lg text-xs font-semibold border bg-gray-50 text-gray-600 border-gray-200">{servico}</div>))) : <p className="text-sm text-gray-400 italic">Nenhum serviço cadastrado.</p>}
               </div>
