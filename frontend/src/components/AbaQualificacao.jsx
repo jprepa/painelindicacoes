@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { UploadCloud, FileSpreadsheet, CheckCircle, AlertCircle, Play, Loader2, Database } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, CheckCircle, AlertCircle, Play, Loader2, Database, Download } from 'lucide-react';
 
 const AbaQualificacao = () => {
   const [arquivoLeads, setArquivoLeads] = useState(null);
-  const [arquivoClientes, setArquivoClientes] = useState(null); // Novo estado
+  const [arquivoClientes, setArquivoClientes] = useState(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("idle");
+
+  // Link direto para o SharePoint
+  const LINK_BASE_PADRAO = "https://poligraph-my.sharepoint.com/:x:/g/personal/joao_prado_softplan_com_br/IQCYo2GT4OAwQ4VBgo8XF0-aAcpsd1ou9e-q-ieRZ6fwMPk?e=vCgHWl";
 
   const processarLista = async () => {
     if (!arquivoLeads) return;
@@ -14,9 +17,8 @@ const AbaQualificacao = () => {
     setStatus("processing");
 
     const formData = new FormData();
-    formData.append('file', arquivoLeads); // Arquivo principal
+    formData.append('file', arquivoLeads);
     
-    // Se tiver arquivo de clientes, anexa também
     if (arquivoClientes) {
       formData.append('file_clientes', arquivoClientes);
     }
@@ -75,23 +77,36 @@ const AbaQualificacao = () => {
                 )}
             </div>
 
-            {/* INPUT 2: CLIENTES (OPCIONAL) */}
-            <div className={`border-2 border-dashed rounded-xl p-6 relative transition-colors ${arquivoClientes ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
-                <p className="text-sm font-bold text-gray-700 mb-2 flex items-center justify-center gap-2">
-                    <Database size={16}/> Base Clientes 
-                </p>
-                {!arquivoClientes ? (
-                    <>
-                        <p className="text-xs text-gray-400">CNPJs na Coluna B</p>
-                        <input type="file" accept=".xlsx" onChange={(e) => setArquivoClientes(e.target.files[0])} className="absolute inset-0 opacity-0 cursor-pointer" />
-                    </>
-                ) : (
-                    <div className="text-blue-700 font-medium text-sm truncate px-2">
-                        {arquivoClientes.name}
-                        <button onClick={(e) => {e.preventDefault(); setArquivoClientes(null)}} className="ml-2 text-xs text-red-400 hover:text-red-600 underline">Remover</button>
-                    </div>
-                )}
+            {/* INPUT 2: CLIENTES (OPCIONAL + LINK DOWNLOAD) */}
+            <div className="flex flex-col">
+                <div className={`border-2 border-dashed rounded-xl p-6 relative transition-colors flex-1 ${arquivoClientes ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
+                    <p className="text-sm font-bold text-gray-700 mb-2 flex items-center justify-center gap-2">
+                        <Database size={16}/> Base Clientes 
+                    </p>
+                    {!arquivoClientes ? (
+                        <>
+                            <p className="text-xs text-gray-400">CNPJs na Coluna B</p>
+                            <input type="file" accept=".xlsx" onChange={(e) => setArquivoClientes(e.target.files[0])} className="absolute inset-0 opacity-0 cursor-pointer" />
+                        </>
+                    ) : (
+                        <div className="text-blue-700 font-medium text-sm truncate px-2">
+                            {arquivoClientes.name}
+                            <button onClick={(e) => {e.preventDefault(); setArquivoClientes(null)}} className="ml-2 text-xs text-red-400 hover:text-red-600 underline">Remover</button>
+                        </div>
+                    )}
+                </div>
+                
+                {/* --- NOVO BOTÃO DE DOWNLOAD AQUI --- */}
+                <a 
+                    href={LINK_BASE_PADRAO}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 text-[10px] text-blue-500 hover:text-blue-700 hover:underline flex items-center justify-center gap-1 transition-colors"
+                >
+                    <Download size={12} /> Não tem a base atualizada? Baixe aqui
+                </a>
             </div>
+
         </div>
 
         {/* BOTÃO DE AÇÃO */}
