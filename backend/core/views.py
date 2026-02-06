@@ -95,40 +95,43 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             for _, row in df.iterrows():
                 try:
                     # 1. Dados Básicos (Usando .get para não quebrar se a coluna mudar um pouco)
+                   # ... (dentro do loop for _, row in df.iterrows():)
+                    
+                    # 1. Dados Básicos
                     nome_empresa = str(row.get("EMPRESA", "")).strip()
                     if not nome_empresa or nome_empresa == "nan": continue
 
-                    contato = str(row.get("CONTATO", "")).strip()
+                    contato = str(row.get("CONTATO", "")).strip() # Às vezes o nome tá na coluna CONTATO
+                    if contato == "nan": 
+                        # Tenta pegar da coluna CONTATOS (plural) que vi na sua imagem
+                        contato = str(row.get("CONTATOS", "")).strip()
                     if contato == "nan": contato = "Não informado"
 
-                    # Tenta pegar "AREA DE ATUAÇÃO" ou "AREA DE ATUACAO" ou "ESTADO"
+                    # Pega Email (Coluna 'E-MAIL' ou 'EMAIL')
+                    email = str(row.get("E-MAIL", row.get("EMAIL", ""))).strip()
+                    if email == "nan": email = ""
+
+                    # Pega Telefone (Muitas vezes está junto com o nome na coluna CONTATOS, mas vamos tentar pegar)
+                    # Se sua planilha tiver uma coluna especifica para telefone, melhor. 
+                    # Na imagem parece que 'CONTATOS' tem tudo misturado. O sistema vai salvar o que tiver lá.
+                    telefone = str(row.get("TELEFONE", row.get("CELULAR", ""))).strip()
+                    if telefone == "nan": telefone = ""
+
                     area_atuacao = str(row.get("AREA DE ATUAÇÃO", row.get("AREA DE ATUACAO", row.get("ESTADO", "")))).strip()
                     if area_atuacao == "nan": area_atuacao = ""
 
-                    # Cidade (tenta pegar de ENDEREÇO ou CIDADE)
                     cidade = str(row.get("CIDADE", row.get("ENDEREÇO", ""))).strip()
                     if cidade == "nan": cidade = ""
 
-                    # 2. Processa os Serviços (Varre as colunas e marca o que tem 'X')
-                    servicos_encontrados = []
-                    
-                    # Para cada coluna do Excel, verifica se bate com nosso mapa
-                    for col_excel in df.columns:
-                        for chave_mapa, nome_sistema in MAPA_SERVICOS.items():
-                            if chave_mapa in col_excel: # Ex: "ORÇAMENTO" está dentro de "ORÇAMENTO (R$)"
-                                valor_celula = str(row[col_excel]).lower()
-                                # Se tiver 'x', 's', 'sim' ou qualquer coisa preenchida que não seja 'nan' ou '-'
-                                if valor_celula not in ['nan', '', '-', 'no', 'nao']:
-                                    if nome_sistema not in servicos_encontrados:
-                                        servicos_encontrados.append(nome_sistema)
+                    # ... (continua a lógica dos serviços igual antes) ...
 
-                    servicos_str = ", ".join(servicos_encontrados)
-
-                    # 3. Salva no Banco
+                    # 3. Salva no Banco (ADICIONE email e telefone aqui)
                     obj, created = Parceiro.objects.update_or_create(
                         empresa=nome_empresa,
                         defaults={
                             "contato_nome": contato,
+                            "email": email,      # <--- Novo
+                            "telefone": telefone, # <--- Novo
                             "estados_atuacao": area_atuacao,
                             "cidade": cidade,
                             "servicos": servicos_str
