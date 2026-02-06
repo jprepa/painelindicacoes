@@ -8,7 +8,6 @@ const MultiSelect = ({ label, options, selected, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef(null);
 
-  // Fecha ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (ref.current && !ref.current.contains(event.target)) setIsOpen(false);
@@ -19,9 +18,9 @@ const MultiSelect = ({ label, options, selected, onChange }) => {
 
   const toggleOption = (option) => {
     if (selected.includes(option)) {
-      onChange(selected.filter(item => item !== option)); // Remove
+      onChange(selected.filter(item => item !== option));
     } else {
-      onChange([...selected, option]); // Adiciona
+      onChange([...selected, option]);
     }
   };
 
@@ -67,10 +66,10 @@ const AbaParceiros = () => {
   const [mostrarModal, setMostrarModal] = useState(false);
   const [parceiroParaEditar, setParceiroParaEditar] = useState(null);
 
-  // --- NOVOS FILTROS (ARRAYS) ---
+  // Filtros
   const [filtroTexto, setFiltroTexto] = useState("");
-  const [filtrosEstados, setFiltrosEstados] = useState([]); // Agora é lista []
-  const [filtrosServicos, setFiltrosServicos] = useState([]); // Agora é lista []
+  const [filtrosEstados, setFiltrosEstados] = useState([]); 
+  const [filtrosServicos, setFiltrosServicos] = useState([]); 
 
   useEffect(() => { carregarParceiros(); }, []);
 
@@ -124,24 +123,13 @@ const AbaParceiros = () => {
     }
   };
 
-  // Listas Únicas para os Filtros
   const todosEstados = [...new Set(parceiros.flatMap(p => p.estados_lista || []))].sort();
   const todosServicos = [...new Set(parceiros.flatMap(p => p.servicos_lista || []))].sort();
 
-  // --- LÓGICA DE FILTRAGEM MULTI-SELECT ---
   const parceirosFiltrados = parceiros.filter(p => {
     const matchTexto = p.empresa.toLowerCase().includes(filtroTexto.toLowerCase());
-    
-    // Verifica se TEM ALGUM dos estados selecionados (Lógica OU)
-    const matchEstado = filtrosEstados.length === 0 
-      ? true 
-      : p.estados_lista && p.estados_lista.some(uf => filtrosEstados.includes(uf));
-
-    // Verifica se TEM ALGUM dos serviços selecionados (Lógica OU)
-    const matchServico = filtrosServicos.length === 0
-      ? true
-      : p.servicos_lista && p.servicos_lista.some(srv => filtrosServicos.includes(srv));
-
+    const matchEstado = filtrosEstados.length === 0 ? true : p.estados_lista && p.estados_lista.some(uf => filtrosEstados.includes(uf));
+    const matchServico = filtrosServicos.length === 0 ? true : p.servicos_lista && p.servicos_lista.some(srv => filtrosServicos.includes(srv));
     return matchTexto && matchEstado && matchServico;
   });
 
@@ -166,21 +154,9 @@ const AbaParceiros = () => {
           <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Briefcase size={20} className="text-blue-600"/> Parceiros ({parceirosFiltrados.length})</h2>
           <div className="space-y-2">
              <input type="text" placeholder="Buscar..." className="w-full text-sm p-2 border rounded-lg bg-gray-50" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} />
-             
-             {/* NOVOS DROPDOWNS MULTI-SELECT */}
              <div className="flex gap-2">
-                <MultiSelect 
-                    label="Estados" 
-                    options={todosEstados} 
-                    selected={filtrosEstados} 
-                    onChange={setFiltrosEstados} 
-                />
-                <MultiSelect 
-                    label="Serviços" 
-                    options={todosServicos} 
-                    selected={filtrosServicos} 
-                    onChange={setFiltrosServicos} 
-                />
+                <MultiSelect label="Estados" options={todosEstados} selected={filtrosEstados} onChange={setFiltrosEstados} />
+                <MultiSelect label="Serviços" options={todosServicos} selected={filtrosServicos} onChange={setFiltrosServicos} />
              </div>
           </div>
           <div className="flex gap-2 mt-2">
@@ -195,15 +171,19 @@ const AbaParceiros = () => {
               <div key={p.id} onClick={() => setParceiroSelecionado(p)} className={`p-3 rounded-xl cursor-pointer border transition-all hover:shadow-md ${parceiroSelecionado?.id === p.id ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'bg-white border-gray-200'}`}>
                 <div className="flex justify-between items-start">
                   <span className="font-bold text-gray-800 text-sm truncate">{p.empresa}</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                      p.status === 'Diamante' ? 'bg-cyan-100 text-cyan-700' : 
-                      p.status === 'Ouro' ? 'bg-yellow-100 text-yellow-700' : 
-                      p.status === 'Prata' ? 'bg-gray-200 text-gray-600' : 
-                      p.status === 'Bronze' ? 'bg-orange-100 text-orange-700' : 
-                      'bg-blue-50 text-blue-600'
-                  }`}>
-                      {p.status}
-                  </span>
+                  
+                  {/* SÓ MOSTRA O SELO SE NÃO FOR 'EM ANÁLISE' */}
+                  {p.status !== 'Em análise' && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                        p.status === 'Diamante' ? 'bg-cyan-100 text-cyan-700' : 
+                        p.status === 'Ouro' ? 'bg-yellow-100 text-yellow-700' : 
+                        p.status === 'Prata' ? 'bg-gray-200 text-gray-600' : 
+                        'bg-orange-100 text-orange-700' // Bronze
+                    }`}>
+                        {p.status}
+                    </span>
+                  )}
+
                 </div>
                 <div className="flex items-center gap-1 mt-1 flex-wrap">{p.estados_lista && p.estados_lista.slice(0, 4).map(uf => (<span key={uf} className="text-[10px] bg-gray-100 text-gray-600 px-1 rounded border border-gray-200">{uf}</span>))}</div>
               </div>
