@@ -6,24 +6,29 @@ class HistoricoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = HistoricoPontuacao
-        fields = ['id', 'tipo', 'pontos', 'data_formatada', 'descricao']
+        fields = ['id', 'data', 'data_formatada', 'tipo', 'pontos', 'descricao']
 
     def get_data_formatada(self, obj):
         return obj.data.strftime('%d/%m/%Y')
 
 class ParceiroSerializer(serializers.ModelSerializer):
-    servicos_lista = serializers.ReadOnlyField()
-    estados_lista = serializers.ReadOnlyField() # NOVO
-    status = serializers.ReadOnlyField()
-    # Traz o histórico aninhado
-    historico = HistoricoSerializer(many=True, read_only=True) 
+    historico = HistoricoSerializer(many=True, read_only=True)
+    estados_lista = serializers.SerializerMethodField()
+    servicos_lista = serializers.SerializerMethodField()
+    # Campos calculados novos
+    score_atual = serializers.DecimalField(source='score_real', max_digits=10, decimal_places=2, read_only=True)
+    vencimento_info = serializers.ReadOnlyField(source='proximo_vencimento')
 
     class Meta:
         model = Parceiro
         fields = '__all__'
 
+    def get_estados_lista(self, obj):
+        if obj.estados_atuacao:
+            return [e.strip() for e in obj.estados_atuacao.split(',') if e.strip()]
+        return []
+
     def get_servicos_lista(self, obj):
-        # Transforma o texto "BIM, Orçamento" em uma lista real ["BIM", "Orçamento"]
         if obj.servicos:
-            return [x.strip() for x in obj.servicos.split(',')]
+            return [s.strip() for s in obj.servicos.split(',') if s.strip()]
         return []
