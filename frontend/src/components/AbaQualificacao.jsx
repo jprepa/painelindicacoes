@@ -105,7 +105,7 @@ const AbaQualificacao = () => {
             }`}
         >
             {loading ? <Loader2 className="animate-spin" /> : <Play fill="currentColor" />} 
-            {loading ? 'Processando Inteligência...' : 'Iniciar Qualificação'}
+            {loading ? 'Processando...' : 'Iniciar Qualificação'}
         </button>
 
         {status === 'success' && (
