@@ -244,7 +244,6 @@ const AbaParceiros = () => {
                    <div className="flex justify-between items-center mt-2">
                      <div>
                         <p className="text-3xl font-extrabold text-gray-800">{parceiroSelecionado.vencimento_info.dias} <span className="text-sm font-medium text-gray-400">dias restantes</span></p>
-                        <p className="text-xs text-orange-600 font-bold mt-1">Pontos vão expirar em breve</p>
                      </div>
                      <div className="text-right bg-red-50 px-3 py-2 rounded-lg border border-red-100">
                         <p className="text-xs text-red-400 font-bold uppercase">Desconto</p>
@@ -254,7 +253,7 @@ const AbaParceiros = () => {
                  ) : (
                    <div className="flex items-center gap-2 text-gray-400 mt-2">
                       <CheckCircle size={20} className="text-green-500"/>
-                      <p className="text-sm">Nenhum ponto prestes a vencer.</p>
+                      <p className="text-sm">Nenhum ponto a vencer.</p>
                    </div>
                  )}
               </div>
