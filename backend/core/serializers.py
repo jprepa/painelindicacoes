@@ -15,9 +15,12 @@ class ParceiroSerializer(serializers.ModelSerializer):
     historico = HistoricoSerializer(many=True, read_only=True)
     estados_lista = serializers.SerializerMethodField()
     servicos_lista = serializers.SerializerMethodField()
-    # Campos calculados novos
+    
     score_atual = serializers.DecimalField(source='score_real', max_digits=10, decimal_places=2, read_only=True)
     vencimento_info = serializers.ReadOnlyField(source='proximo_vencimento')
+    
+    # --- A CORREÇÃO DO SELO ---
+    status = serializers.ReadOnlyField() # <--- ADICIONE ISSO! Força o envio do status calculado
 
     class Meta:
         model = Parceiro
