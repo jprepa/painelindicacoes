@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { X, Save, Check, Briefcase } from 'lucide-react';
+import { X, Save, Check, Briefcase, Mail, Phone, MapPin, User } from 'lucide-react';
 
+// LISTA COMPLETA + OPÇÕES ESPECIAIS
 const ESTADOS_BRASIL = [
-  'SP', 'RJ', 'MG', 'ES', 'PR', 'SC', 'RS', 
-  'MS', 'MT', 'GO', 'DF', 'BA', 'PE', 'CE', 'AM', 'PA', 'MA'
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 
+  'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+  'Remoto', 'Brasil'
 ];
 
 // LISTA ATUALIZADA CONFORME SUA PLANILHA
@@ -33,6 +35,8 @@ const ModalNovoParceiro = ({ aoFechar, aoSalvar, parceiroParaEditar = null }) =>
   const [form, setForm] = useState({
     empresa: '',
     contato_nome: '',
+    email: '',    // <--- Novo Campo
+    telefone: '', // <--- Novo Campo
     cidade: '',
     servicos: '', 
     estados_atuacao: '' 
@@ -43,6 +47,8 @@ const ModalNovoParceiro = ({ aoFechar, aoSalvar, parceiroParaEditar = null }) =>
       setForm({
         empresa: parceiroParaEditar.empresa || '',
         contato_nome: parceiroParaEditar.contato_nome || '',
+        email: parceiroParaEditar.email || '',       // <--- Carrega do banco
+        telefone: parceiroParaEditar.telefone || '', // <--- Carrega do banco
         cidade: parceiroParaEditar.cidade || '',
         servicos: parceiroParaEditar.servicos || '',
         estados_atuacao: parceiroParaEditar.estados_atuacao || ''
@@ -98,45 +104,70 @@ const ModalNovoParceiro = ({ aoFechar, aoSalvar, parceiroParaEditar = null }) =>
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+        
+        {/* CABEÇALHO */}
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
           <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-            <Briefcase size={20}/> {parceiroParaEditar ? `Editar ${parceiroParaEditar.empresa}` : 'Novo Parceiro'}
+            <Briefcase size={20} className="text-blue-600"/> {parceiroParaEditar ? `Editar ${parceiroParaEditar.empresa}` : 'Novo Parceiro'}
           </h2>
           <button onClick={aoFechar} className="p-2 hover:bg-gray-200 rounded-full text-gray-500"><X size={20} /></button>
         </div>
 
+        {/* CORPO DO FORMULÁRIO */}
         <div className="p-6 space-y-5 overflow-y-auto scrollbar-thin">
-          <div className="space-y-3">
+          <div className="space-y-4">
+            
+            {/* EMPRESA */}
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Nome da Empresa</label>
               <input name="empresa" value={form.empresa} onChange={handleChange}
                 className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
                 placeholder="Ex: Construtora XYZ" />
             </div>
+
+            {/* CONTATO E CIDADE */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Contato</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1 flex items-center gap-1"><User size={12}/> Contato</label>
                 <input name="contato_nome" value={form.contato_nome} onChange={handleChange}
                   className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
                   placeholder="Nome do responsável" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Cidade Base</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1 flex items-center gap-1"><MapPin size={12}/> Cidade Base</label>
                 <input name="cidade" value={form.cidade} onChange={handleChange}
                   className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
                   placeholder="Ex: São Paulo" />
               </div>
             </div>
+
+            {/* EMAIL E TELEFONE (NOVOS CAMPOS) */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1 flex items-center gap-1"><Mail size={12}/> Email</label>
+                <input name="email" value={form.email} onChange={handleChange}
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                  placeholder="email@empresa.com" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1 flex items-center gap-1"><Phone size={12}/> Telefone</label>
+                <input name="telefone" value={form.telefone} onChange={handleChange}
+                  className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                  placeholder="(00) 00000-0000" />
+              </div>
+            </div>
+
           </div>
 
           <hr className="border-gray-100"/>
           
+          {/* ESTADOS */}
           <div>
             <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Área de Atuação</label>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto scrollbar-thin pr-2">
               {ESTADOS_BRASIL.map(uf => (
                 <button key={uf} type="button" onClick={() => toggleEstado(uf)}
-                  className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${isEstadoMarcado(uf) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+                  className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all ${isEstadoMarcado(uf) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
                   {uf}
                 </button>
               ))}
@@ -145,12 +176,13 @@ const ModalNovoParceiro = ({ aoFechar, aoSalvar, parceiroParaEditar = null }) =>
 
           <hr className="border-gray-100"/>
 
+          {/* SERVIÇOS */}
           <div>
             <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Serviços Prestados</label>
             <div className="flex flex-wrap gap-2">
               {LISTA_SERVICOS.map(srv => (
                 <button key={srv} type="button" onClick={() => toggleServico(srv)}
-                  className={`text-[10px] font-bold px-3 py-2 rounded-lg border transition-all flex items-center gap-1 ${isServicoMarcado(srv) ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200'}`}>
+                  className={`text-[10px] font-bold px-3 py-2 rounded-lg border transition-all flex items-center gap-1 ${isServicoMarcado(srv) ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
                   {isServicoMarcado(srv) && <Check size={10} strokeWidth={4}/>} {srv}
                 </button>
               ))}
@@ -158,6 +190,7 @@ const ModalNovoParceiro = ({ aoFechar, aoSalvar, parceiroParaEditar = null }) =>
           </div>
         </div>
 
+        {/* RODAPÉ */}
         <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
           <button onClick={aoFechar} className="px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-200 rounded-lg">Cancelar</button>
           <button onClick={salvar} disabled={loading} className="px-6 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md flex items-center gap-2 disabled:opacity-50">
