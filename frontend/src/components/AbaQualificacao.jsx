@@ -52,7 +52,7 @@ const AbaQualificacao = () => {
         
         <h1 className="text-2xl font-bold text-gray-800 mb-2">Agente de Qualificação R&E</h1>
         <p className="text-gray-500 mb-8">
-          Cruza dados da web e verifica duplicidade com base de clientes/CRM.
+          Cruza dados da web e verifica duplicidade com base de Clientes/CRM
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -60,7 +60,7 @@ const AbaQualificacao = () => {
             {/* INPUT 1: LEADS (OBRIGATÓRIO) */}
             <div className={`border-2 border-dashed rounded-xl p-6 relative transition-colors ${arquivoLeads ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
                 <p className="text-sm font-bold text-gray-700 mb-2 flex items-center justify-center gap-2">
-                    <FileSpreadsheet size={16}/> Lista de Leads (Obrigatório)
+                    <FileSpreadsheet size={16}/> Lista de Leads 
                 </p>
                 {!arquivoLeads ? (
                     <>
@@ -78,7 +78,7 @@ const AbaQualificacao = () => {
             {/* INPUT 2: CLIENTES (OPCIONAL) */}
             <div className={`border-2 border-dashed rounded-xl p-6 relative transition-colors ${arquivoClientes ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
                 <p className="text-sm font-bold text-gray-700 mb-2 flex items-center justify-center gap-2">
-                    <Database size={16}/> Base Clientes (Opcional)
+                    <Database size={16}/> Base Clientes 
                 </p>
                 {!arquivoClientes ? (
                     <>
