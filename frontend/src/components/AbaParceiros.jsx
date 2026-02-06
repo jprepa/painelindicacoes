@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Phone, MapPin, Briefcase, TrendingUp, Filter, Calendar, User, Clock, ArrowRight, Plus, History, CheckCircle, Edit2, UploadCloud, Loader2 } from 'lucide-react';
+import { MapPin, Briefcase, TrendingUp, Calendar, User, Clock, Plus, History, CheckCircle, Edit2, UploadCloud, Loader2, Mail, Phone, AlertTriangle } from 'lucide-react';
 import ModalNovoParceiro from './ModalNovoParceiro';
 
 const AbaParceiros = () => {
@@ -8,14 +8,11 @@ const AbaParceiros = () => {
   const [parceiros, setParceiros] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Upload
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
-
   const [mostrarModal, setMostrarModal] = useState(false);
   const [parceiroParaEditar, setParceiroParaEditar] = useState(null);
 
-  // Filtros
   const [filtroTexto, setFiltroTexto] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroServico, setFiltroServico] = useState("");
@@ -26,31 +23,23 @@ const AbaParceiros = () => {
     setLoading(true);
     axios.get('https://prevision-backend.onrender.com/api/parceiros/')
       .then(response => { setParceiros(response.data); setLoading(false); })
-      .catch(erro => console.error("Erro:", erro));
+      .catch(erro => console.error(erro));
   };
 
-  // --- IMPORTAÇÃO ---
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     setUploading(true);
     const formData = new FormData();
     formData.append('file', file);
-
     try {
       const response = await axios.post('https://prevision-backend.onrender.com/api/parceiros/importar_excel/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       alert(response.data.mensagem);
       carregarParceiros();
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao importar. Verifique se a planilha tem a coluna 'EMPRESA'.");
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    } catch (error) { alert("Erro ao importar."); } 
+    finally { setUploading(false); if(fileInputRef.current) fileInputRef.current.value = ""; }
   };
 
   const aoSalvarParceiro = (parceiroAtualizado) => {
@@ -62,26 +51,24 @@ const AbaParceiros = () => {
       setParceiros([parceiroAtualizado, ...parceiros]);
       setParceiroSelecionado(parceiroAtualizado);
     }
-    setMostrarModal(false);
-    setParceiroParaEditar(null);
+    setMostrarModal(false); setParceiroParaEditar(null);
   };
 
   const registrarMovimentacao = async (tipo) => {
     if (!parceiroSelecionado) return;
     const valorPadrao = tipo === 'Venda' ? "1.0" : "0.7";
-    const pontos = prompt(`Quantos pontos para essa ${tipo}?`, valorPadrao);
+    const pontos = prompt(`Pontos para ${tipo}?`, valorPadrao);
     if (pontos) {
       try {
         const response = await axios.post(`https://prevision-backend.onrender.com/api/parceiros/${parceiroSelecionado.id}/registrar_indicacao/`, { pontos, tipo });
         const atualizado = response.data;
         setParceiros(parceiros.map(p => p.id === atualizado.id ? atualizado : p));
         setParceiroSelecionado(atualizado);
-        alert("Sucesso!");
-      } catch (error) { alert("Erro ao registrar."); }
+        alert("Salvo!");
+      } catch (error) { alert("Erro ao salvar."); }
     }
   };
 
-  // Filtros e Visual
   const todosEstados = [...new Set(parceiros.flatMap(p => p.estados_lista || []))].sort();
   const todosServicos = [...new Set(parceiros.flatMap(p => p.servicos_lista || []))].sort();
   const parceirosFiltrados = parceiros.filter(p => {
@@ -92,9 +79,9 @@ const AbaParceiros = () => {
   });
 
   const getProgresso = (score) => {
-    const s = parseFloat(score);
+    const s = parseFloat(score || 0);
     const niveis = { bronze: 1.7, prata: 2.4, ouro: 3.4, diamante: 6.1 };
-    if (s < niveis.bronze) return { pct: ((s)/1.7)*100, label: `Faltam ${(1.7-s).toFixed(1)} para Bronze` };
+    if (s < niveis.bronze) return { pct: (s/1.7)*100, label: `Faltam ${(1.7-s).toFixed(1)} para Bronze` };
     if (s < niveis.prata) return { pct: ((s-1.7)/(2.4-1.7))*100, label: `Faltam ${(2.4-s).toFixed(1)} para Prata` };
     if (s < niveis.ouro) return { pct: ((s-2.4)/(3.4-2.4))*100, label: `Faltam ${(3.4-s).toFixed(1)} para Ouro` };
     if (s < niveis.diamante) return { pct: ((s-3.4)/(6.1-3.4))*100, label: `Faltam ${(6.1-s).toFixed(1)} para Diamante` };
@@ -110,31 +97,18 @@ const AbaParceiros = () => {
       <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col shadow-lg z-10">
         <div className="p-4 border-b border-gray-100 bg-white space-y-3">
           <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Briefcase size={20} className="text-blue-600"/> Parceiros ({parceirosFiltrados.length})</h2>
-          
           <div className="space-y-2">
              <input type="text" placeholder="Buscar..." className="w-full text-sm p-2 border rounded-lg bg-gray-50" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} />
              <div className="flex gap-2">
-                <select className="w-1/2 text-xs p-2 border rounded-lg bg-white" onChange={e => setFiltroEstado(e.target.value)} value={filtroEstado}>
-                    <option value="">Estados</option>
-                    {todosEstados.map(e => <option key={e} value={e}>{e}</option>)}
-                </select>
-                <select className="w-1/2 text-xs p-2 border rounded-lg bg-white" onChange={e => setFiltroServico(e.target.value)} value={filtroServico}>
-                    <option value="">Serviços</option>
-                    {todosServicos.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <select className="w-1/2 text-xs p-2 border rounded-lg bg-white" onChange={e => setFiltroEstado(e.target.value)} value={filtroEstado}><option value="">Estados</option>{todosEstados.map(e => <option key={e} value={e}>{e}</option>)}</select>
+                <select className="w-1/2 text-xs p-2 border rounded-lg bg-white" onChange={e => setFiltroServico(e.target.value)} value={filtroServico}><option value="">Serviços</option>{todosServicos.map(s => <option key={s} value={s}>{s}</option>)}</select>
              </div>
           </div>
-
           <div className="flex gap-2 mt-2">
-            <button onClick={() => fileInputRef.current.click()} disabled={uploading} className="w-1/3 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg flex items-center justify-center gap-2 font-medium text-xs disabled:opacity-50">
-                {uploading ? <Loader2 size={16} className="animate-spin"/> : <UploadCloud size={16} />} Importar
-            </button>
-            <button onClick={() => { setParceiroParaEditar(null); setMostrarModal(true); }} className="w-2/3 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg flex items-center justify-center gap-2 font-medium text-sm">
-                <Plus size={16} /> Novo Parceiro
-            </button>
+            <button onClick={() => fileInputRef.current.click()} disabled={uploading} className="w-1/3 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg flex items-center justify-center gap-2 font-medium text-xs disabled:opacity-50">{uploading ? <Loader2 size={16} className="animate-spin"/> : <UploadCloud size={16} />} Importar</button>
+            <button onClick={() => { setParceiroParaEditar(null); setMostrarModal(true); }} className="w-2/3 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg flex items-center justify-center gap-2 font-medium text-sm"><Plus size={16} /> Novo Parceiro</button>
           </div>
         </div>
-        
         <div className="overflow-y-auto flex-1 p-2 space-y-2 scrollbar-thin bg-gray-50">
           {loading ? <p className="text-center text-gray-400 mt-10">Carregando...</p> : parceirosFiltrados.map((p) => (
               <div key={p.id} onClick={() => setParceiroSelecionado(p)} className={`p-3 rounded-xl cursor-pointer border transition-all hover:shadow-md ${parceiroSelecionado?.id === p.id ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'bg-white border-gray-200'}`}>
@@ -142,9 +116,7 @@ const AbaParceiros = () => {
                   <span className="font-bold text-gray-800 text-sm truncate">{p.empresa}</span>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${p.status === 'Diamante' ? 'bg-cyan-100 text-cyan-700' : p.status === 'Ouro' ? 'bg-yellow-100 text-yellow-700' : p.status === 'Prata' ? 'bg-gray-200 text-gray-600' : 'bg-orange-100 text-orange-700'}`}>{p.status}</span>
                 </div>
-                <div className="flex items-center gap-1 mt-1 flex-wrap">
-                    {p.estados_lista && p.estados_lista.slice(0, 4).map(uf => (<span key={uf} className="text-[10px] bg-gray-100 text-gray-600 px-1 rounded border border-gray-200">{uf}</span>))}
-                </div>
+                <div className="flex items-center gap-1 mt-1 flex-wrap">{p.estados_lista && p.estados_lista.slice(0, 4).map(uf => (<span key={uf} className="text-[10px] bg-gray-100 text-gray-600 px-1 rounded border border-gray-200">{uf}</span>))}</div>
               </div>
           ))}
         </div>
@@ -161,17 +133,23 @@ const AbaParceiros = () => {
                      <h1 className="text-3xl font-bold text-gray-800">{parceiroSelecionado.empresa}</h1>
                      <button onClick={() => { setParceiroParaEditar(parceiroSelecionado); setMostrarModal(true); }} className="text-gray-400 hover:text-blue-600 transition-colors p-1 rounded-full hover:bg-blue-50"><Edit2 size={18}/></button>
                   </div>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                     {parceiroSelecionado.estados_lista && parceiroSelecionado.estados_lista.map(uf => (<span key={uf} className="flex items-center gap-1 text-xs font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-md border border-blue-100"><MapPin size={10}/> {uf}</span>))}
+                  
+                  <div className="flex flex-wrap gap-2 mt-2 mb-4">
+                     {parceiroSelecionado.cidade && <span className="flex items-center gap-1 text-xs font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-md border border-gray-200"><MapPin size={10}/> {parceiroSelecionado.cidade}</span>}
+                     {parceiroSelecionado.estados_lista && parceiroSelecionado.estados_lista.map(uf => (<span key={uf} className="flex items-center gap-1 text-xs font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-md border border-blue-100">{uf}</span>))}
                   </div>
-                  <div className="flex items-center gap-4 mt-4 text-sm text-gray-500">
-                    <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded"><User size={14}/> {parceiroSelecionado.contato_nome}</span>
-                    <span className="flex items-center gap-1"><Calendar size={14}/> Última: <strong>{parceiroSelecionado.ultima_indicacao || "Nunca"}</strong></span>
+
+                  {/* NOVOS DADOS DE CONTATO */}
+                  <div className="flex flex-col gap-1 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-100 w-fit">
+                    <span className="flex items-center gap-2 font-bold text-gray-800"><User size={14}/> {parceiroSelecionado.contato_nome || "Sem contato"}</span>
+                    {parceiroSelecionado.email && <span className="flex items-center gap-2"><Mail size={14} className="text-gray-400"/> {parceiroSelecionado.email}</span>}
+                    {parceiroSelecionado.telefone && <span className="flex items-center gap-2"><Phone size={14} className="text-gray-400"/> {parceiroSelecionado.telefone}</span>}
                   </div>
+
                 </div>
                 <div className="flex flex-col items-end gap-3">
                   <div className="text-right">
-                    <p className="text-xs text-gray-400 uppercase font-bold tracking-widest">Score</p>
+                    <p className="text-xs text-gray-400 uppercase font-bold tracking-widest">Score (90 Dias)</p>
                     <p className="text-5xl font-extrabold text-blue-600 tracking-tighter">{parceiroSelecionado.score_atual}</p>
                   </div>
                   <div className="flex gap-2">
@@ -183,6 +161,7 @@ const AbaParceiros = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* PROGRESSO */}
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-4"><TrendingUp size={18} className="text-green-500"/> Progresso</h3>
                 <div className="flex justify-between text-xs font-bold text-gray-500 uppercase mb-2">
@@ -192,12 +171,32 @@ const AbaParceiros = () => {
                   <div className="bg-gradient-to-r from-blue-500 to-cyan-400 h-3 rounded-full transition-all duration-500" style={{ width: `${getProgresso(parceiroSelecionado.score_atual).pct}%` }}></div>
                 </div>
               </div>
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
-                 <div><h3 className="font-bold text-gray-700 flex items-center gap-2 mb-1"><Clock size={18} className="text-orange-500"/> Inatividade</h3><p className="text-sm text-gray-500">Dias sem indicar: <strong className="text-gray-800">{parceiroSelecionado.dias_sem_indicar}</strong></p></div>
-                 <div className="text-right"><p className="text-xs text-gray-400">Penalidade</p><p className="text-xl font-bold text-red-500">-{parceiroSelecionado.multa_estimada} pts</p></div>
+
+              {/* CARD DE VENCIMENTO CORRIGIDO */}
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                 <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-2"><Clock size={18} className="text-orange-500"/> Próximo Vencimento</h3>
+                 
+                 {parceiroSelecionado.vencimento_info ? (
+                   <div className="flex justify-between items-center mt-2">
+                     <div>
+                        <p className="text-3xl font-extrabold text-gray-800">{parceiroSelecionado.vencimento_info.dias} <span className="text-sm font-medium text-gray-400">dias restantes</span></p>
+                        <p className="text-xs text-orange-600 font-bold mt-1">Pontos vão expirar em breve</p>
+                     </div>
+                     <div className="text-right bg-red-50 px-3 py-2 rounded-lg border border-red-100">
+                        <p className="text-xs text-red-400 font-bold uppercase">A perder</p>
+                        <p className="text-xl font-bold text-red-600">-{parceiroSelecionado.vencimento_info.pontos} pts</p>
+                     </div>
+                   </div>
+                 ) : (
+                   <div className="flex items-center gap-2 text-gray-400 mt-2">
+                      <CheckCircle size={20} className="text-green-500"/>
+                      <p className="text-sm">Nenhum ponto prestes a vencer.</p>
+                   </div>
+                 )}
               </div>
             </div>
 
+            {/* TABELA E SERVIÇOS (MANTIDOS) */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><History size={18} className="text-purple-500"/> Histórico de Pontuação</h3>
                 <div className="overflow-hidden rounded-lg border border-gray-100">
