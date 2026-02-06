@@ -27,7 +27,7 @@ const AbaBeneficios = () => {
         
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold text-gray-800">Tabela de Categorias e Benefícios 🚀</h1>
-          <p className="text-gray-500">Regras e recompensas do Programa de Parceiros Prevision.</p>
+          <p className="text-gray-500">Regras e recompensas do Programa de Parceiros Prevision</p>
         </div>
 
         {/* TABELA DE CARDS */}
@@ -35,7 +35,7 @@ const AbaBeneficios = () => {
           <div className="grid grid-cols-5 text-center">
             
             <div className="p-6 bg-gray-50 border-b border-gray-100 flex items-center justify-start">
-              <span className="font-bold text-gray-400 uppercase tracking-wider text-xs">Benefícios Exclusivos</span>
+              <span className="font-bold text-gray-400 uppercase tracking-wider text-xs">Benefícios</span>
             </div>
 
             <div className="p-6 border-b border-r border-gray-100 bg-orange-50">
