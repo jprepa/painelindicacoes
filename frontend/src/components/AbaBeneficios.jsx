@@ -2,7 +2,6 @@ import React from 'react';
 import { Check, X, Trophy, Star, Shield, Crown, Zap } from 'lucide-react';
 
 const AbaBeneficios = () => {
-  // Lista atualizada com as suas regras de negócio
   const beneficios = [
     { nome: "Divulgação no Site", bronze: true, prata: true, ouro: true, diamante: true },
     { nome: "Plano Premium + 3 Meses/Venda", bronze: true, prata: true, ouro: true, diamante: true },
@@ -16,11 +15,9 @@ const AbaBeneficios = () => {
     { nome: "Ingresso Construsummit", bronze: false, prata: false, ouro: false, diamante: true },
   ];
 
-  // Componente auxiliar para renderizar o ícone ou texto na célula
   const RenderCheck = ({ valor }) => {
     if (valor === true) return <Check className="mx-auto text-green-500" size={20} />;
     if (valor === false) return <div className="mx-auto w-2 h-2 bg-gray-200 rounded-full"></div>;
-    // Se for texto (ex: "5%"), mostra em negrito
     return <span className="font-bold text-gray-700 text-sm">{valor}</span>;
   };
 
@@ -37,12 +34,10 @@ const AbaBeneficios = () => {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="grid grid-cols-5 text-center">
             
-            {/* Cabeçalho Lateral (Título das Linhas) */}
             <div className="p-6 bg-gray-50 border-b border-gray-100 flex items-center justify-start">
               <span className="font-bold text-gray-400 uppercase tracking-wider text-xs">Benefícios Exclusivos</span>
             </div>
 
-            {/* Cabeçalhos dos Níveis (Colunas) */}
             <div className="p-6 border-b border-r border-gray-100 bg-orange-50">
               <Shield className="mx-auto text-orange-700 mb-2" size={24}/>
               <h3 className="font-bold text-orange-800">Bronze</h3>
@@ -61,26 +56,20 @@ const AbaBeneficios = () => {
               <h3 className="font-bold text-cyan-800">Diamante</h3>
             </div>
 
-            {/* Linhas da Tabela (Geradas Automaticamente) */}
             {beneficios.map((item, index) => (
               <React.Fragment key={index}>
-                {/* Nome do Benefício */}
                 <div className="p-4 text-left text-sm font-medium text-gray-600 border-b border-gray-50 flex items-center bg-gray-50/50 px-6">
                   {item.nome}
                 </div>
-                {/* Coluna Bronze */}
                 <div className="p-4 border-b border-gray-50 border-r flex items-center justify-center bg-orange-50/10">
                   <RenderCheck valor={item.bronze} />
                 </div>
-                {/* Coluna Prata */}
                 <div className="p-4 border-b border-gray-50 border-r flex items-center justify-center bg-gray-50/20">
                   <RenderCheck valor={item.prata} />
                 </div>
-                {/* Coluna Ouro */}
                 <div className="p-4 border-b border-gray-50 border-r flex items-center justify-center bg-yellow-50/10">
                   <RenderCheck valor={item.ouro} />
                 </div>
-                {/* Coluna Diamante */}
                 <div className="p-4 border-b border-gray-50 flex items-center justify-center bg-cyan-50/10">
                   <RenderCheck valor={item.diamante} />
                 </div>
@@ -90,19 +79,24 @@ const AbaBeneficios = () => {
           </div>
         </div>
 
-        {/* Cards de Destaque (Rodapé) */}
+        {/* --- CARDS DE RODAPÉ (AJUSTADO PARA CENTRALIZAR) --- */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden">
+            {/* Adicionei 'flex flex-col items-center text-center' para centralizar tudo */}
+            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden flex flex-col items-center text-center">
                 <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -mr-4 -mt-4"></div>
-                <h4 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
+                
+                {/* Ícone e Título centralizados */}
+                <h4 className="font-bold text-gray-800 mb-2 flex items-center justify-center gap-2">
                     <Zap size={18} className="text-green-600" /> Progressão Facilitada
                 </h4>
+                
                 <p className="text-sm text-gray-500">
                     Comece a Indicar agora mesmo e sua categoria muda rapidamente
                 </p>
             </div>
-
-        
+            
+            {/* Card Exemplo 2 (Opcional, só pra encher o grid se quiser) */}
+            {/* <div className="bg-white p-6 ..."> ... </div> */}
         </div>
 
       </div>
