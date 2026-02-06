@@ -79,13 +79,13 @@ const AbaBeneficios = () => {
           </div>
         </div>
 
-        {/* --- CARDS DE RODAPÉ (AJUSTADO PARA CENTRALIZAR) --- */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Adicionei 'flex flex-col items-center text-center' para centralizar tudo */}
-            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden flex flex-col items-center text-center">
+      {/* --- CARDS DE RODAPÉ (AGORA CENTRALIZADO NA TELA) --- */}
+        {/* Troquei 'grid grid-cols-3' por 'flex justify-center' */}
+        <div className="flex justify-center gap-6 mt-8">
+            
+            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm relative overflow-hidden flex flex-col items-center text-center max-w-md w-full">
                 <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -mr-4 -mt-4"></div>
                 
-                {/* Ícone e Título centralizados */}
                 <h4 className="font-bold text-gray-800 mb-2 flex items-center justify-center gap-2">
                     <Zap size={18} className="text-green-600" /> Progressão Facilitada
                 </h4>
@@ -94,11 +94,8 @@ const AbaBeneficios = () => {
                     Comece a Indicar agora mesmo e sua categoria muda rapidamente
                 </p>
             </div>
-            
-            {/* Card Exemplo 2 (Opcional, só pra encher o grid se quiser) */}
-            {/* <div className="bg-white p-6 ..."> ... </div> */}
-        </div>
 
+        </div>
       </div>
     </div>
   );
