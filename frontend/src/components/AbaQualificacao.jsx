@@ -103,7 +103,7 @@ const AbaQualificacao = () => {
                     rel="noopener noreferrer"
                     className="mt-2 text-[10px] text-blue-500 hover:text-blue-700 hover:underline flex items-center justify-center gap-1 transition-colors"
                 >
-                    <Download size={12} /> Não tem a base atualizada? Baixe aqui
+                    <Download size={12} /> Download
                 </a>
             </div>
 
