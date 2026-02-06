@@ -114,8 +114,16 @@ const AbaParceiros = () => {
               <div key={p.id} onClick={() => setParceiroSelecionado(p)} className={`p-3 rounded-xl cursor-pointer border transition-all hover:shadow-md ${parceiroSelecionado?.id === p.id ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'bg-white border-gray-200'}`}>
                 <div className="flex justify-between items-start">
                   <span className="font-bold text-gray-800 text-sm truncate">{p.empresa}</span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${p.status === 'Diamante' ? 'bg-cyan-100 text-cyan-700' : p.status === 'Ouro' ? 'bg-yellow-100 text-yellow-700' : p.status === 'Prata' ? 'bg-gray-200 text-gray-600' : 'bg-orange-100 text-orange-700'}`}>{p.status}</span>
-                </div>
+               // Procure este trecho dentro do parceirosFiltrados.map(...)
+<span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+  p.status === 'Diamante' ? 'bg-cyan-100 text-cyan-700' :
+  p.status === 'Ouro' ? 'bg-yellow-100 text-yellow-700' :
+  p.status === 'Prata' ? 'bg-gray-200 text-gray-600' :
+  p.status === 'Bronze' ? 'bg-orange-100 text-orange-700' :
+  'bg-blue-50 text-blue-600' // Cor padrão para "Em análise" ou outros
+}`}>
+  {p.status}
+</span>
                 <div className="flex items-center gap-1 mt-1 flex-wrap">{p.estados_lista && p.estados_lista.slice(0, 4).map(uf => (<span key={uf} className="text-[10px] bg-gray-100 text-gray-600 px-1 rounded border border-gray-200">{uf}</span>))}</div>
               </div>
           ))}
