@@ -5,6 +5,7 @@ from datetime import timedelta
 class Parceiro(models.Model):
     empresa = models.CharField(max_length=255)
     contato_nome = models.CharField(max_length=255, blank=True, null=True)
+    
     # Novos Campos de Contato
     email = models.EmailField(max_length=255, blank=True, null=True)
     telefone = models.CharField(max_length=50, blank=True, null=True)
@@ -19,7 +20,6 @@ class Parceiro(models.Model):
     def __str__(self):
         return self.empresa
 
-    # --- LÓGICA DE 3 MESES ---
     @property
     def score_real(self):
         """Calcula o score somando APENAS indicações dos últimos 90 dias"""
@@ -27,9 +27,9 @@ class Parceiro(models.Model):
         total = self.historico.filter(data__gte=data_limite).aggregate(models.Sum('pontos'))['pontos__sum']
         return total or 0.00
 
- @property
+    @property
     def proximo_vencimento(self):
-        """Calcula expiração agrupando por dia"""
+        """Calcula expiração agrupando por dia (Soma pontos do lote)"""
         data_limite = timezone.now().date() - timedelta(days=90)
         
         # 1. Pega a data da indicação mais antiga que AINDA é válida
@@ -46,14 +46,14 @@ class Parceiro(models.Model):
             
             return {
                 "dias": max(dias_restantes, 0),
-                "pontos": total_pontos_lote, # Retorna a SOMA (ex: 4.80) e não só o unitário
+                "pontos": total_pontos_lote, # Retorna a SOMA (ex: 4.80)
                 "data_vencimento": data_expiracao
             }
         return None
 
     @property
     def status(self):
-        s = float(self.score_real) # Usa o score real (90 dias) para definir o status
+        s = float(self.score_real)
         if s >= 6.1: return "Diamante"
         if s >= 3.4: return "Ouro"
         if s >= 2.4: return "Prata"
