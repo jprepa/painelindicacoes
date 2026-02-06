@@ -1,7 +1,61 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { MapPin, Briefcase, TrendingUp, Calendar, User, Clock, Plus, History, CheckCircle, Edit2, UploadCloud, Loader2, Mail, Phone, AlertTriangle } from 'lucide-react';
+import { MapPin, Briefcase, TrendingUp, Calendar, User, Clock, Plus, History, CheckCircle, Edit2, UploadCloud, Loader2, Mail, Phone, ChevronDown, Check } from 'lucide-react';
 import ModalNovoParceiro from './ModalNovoParceiro';
+
+// --- COMPONENTE DE MULTI-SELEÇÃO (DROPDOWN) ---
+const MultiSelect = ({ label, options, selected, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef(null);
+
+  // Fecha ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (ref.current && !ref.current.contains(event.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleOption = (option) => {
+    if (selected.includes(option)) {
+      onChange(selected.filter(item => item !== option)); // Remove
+    } else {
+      onChange([...selected, option]); // Adiciona
+    }
+  };
+
+  return (
+    <div className="relative w-1/2" ref={ref}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full text-xs p-2 border rounded-lg bg-white text-left flex justify-between items-center transition-all ${selected.length > 0 ? 'border-blue-500 text-blue-700 bg-blue-50' : 'text-gray-500 border-gray-200'}`}
+      >
+        <span className="truncate font-medium">
+            {selected.length === 0 ? label : `${selected.length} selecionados`}
+        </span>
+        <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}/>
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto scrollbar-thin">
+          {options.length > 0 ? options.map(opt => (
+            <div
+              key={opt}
+              onClick={() => toggleOption(opt)}
+              className="px-3 py-2 text-xs flex items-center gap-2 hover:bg-gray-50 cursor-pointer text-gray-700 border-b border-gray-50 last:border-0"
+            >
+              <div className={`w-3 h-3 border rounded flex items-center justify-center transition-colors ${selected.includes(opt) ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white'}`}>
+                {selected.includes(opt) && <Check size={8} className="text-white" strokeWidth={4}/>}
+              </div>
+              <span className={selected.includes(opt) ? 'font-bold text-gray-900' : ''}>{opt}</span>
+            </div>
+          )) : <div className="p-2 text-center text-xs text-gray-400">Nenhuma opção</div>}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const AbaParceiros = () => {
   const [parceiroSelecionado, setParceiroSelecionado] = useState(null);
@@ -13,9 +67,10 @@ const AbaParceiros = () => {
   const [mostrarModal, setMostrarModal] = useState(false);
   const [parceiroParaEditar, setParceiroParaEditar] = useState(null);
 
+  // --- NOVOS FILTROS (ARRAYS) ---
   const [filtroTexto, setFiltroTexto] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState("");
-  const [filtroServico, setFiltroServico] = useState("");
+  const [filtrosEstados, setFiltrosEstados] = useState([]); // Agora é lista []
+  const [filtrosServicos, setFiltrosServicos] = useState([]); // Agora é lista []
 
   useEffect(() => { carregarParceiros(); }, []);
 
@@ -69,12 +124,24 @@ const AbaParceiros = () => {
     }
   };
 
+  // Listas Únicas para os Filtros
   const todosEstados = [...new Set(parceiros.flatMap(p => p.estados_lista || []))].sort();
   const todosServicos = [...new Set(parceiros.flatMap(p => p.servicos_lista || []))].sort();
+
+  // --- LÓGICA DE FILTRAGEM MULTI-SELECT ---
   const parceirosFiltrados = parceiros.filter(p => {
     const matchTexto = p.empresa.toLowerCase().includes(filtroTexto.toLowerCase());
-    const matchEstado = filtroEstado ? (p.estados_lista && p.estados_lista.includes(filtroEstado)) : true;
-    const matchServico = filtroServico ? (p.servicos_lista && p.servicos_lista.includes(filtroServico)) : true;
+    
+    // Verifica se TEM ALGUM dos estados selecionados (Lógica OU)
+    const matchEstado = filtrosEstados.length === 0 
+      ? true 
+      : p.estados_lista && p.estados_lista.some(uf => filtrosEstados.includes(uf));
+
+    // Verifica se TEM ALGUM dos serviços selecionados (Lógica OU)
+    const matchServico = filtrosServicos.length === 0
+      ? true
+      : p.servicos_lista && p.servicos_lista.some(srv => filtrosServicos.includes(srv));
+
     return matchTexto && matchEstado && matchServico;
   });
 
@@ -99,9 +166,21 @@ const AbaParceiros = () => {
           <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Briefcase size={20} className="text-blue-600"/> Parceiros ({parceirosFiltrados.length})</h2>
           <div className="space-y-2">
              <input type="text" placeholder="Buscar..." className="w-full text-sm p-2 border rounded-lg bg-gray-50" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} />
+             
+             {/* NOVOS DROPDOWNS MULTI-SELECT */}
              <div className="flex gap-2">
-                <select className="w-1/2 text-xs p-2 border rounded-lg bg-white" onChange={e => setFiltroEstado(e.target.value)} value={filtroEstado}><option value="">Estados</option>{todosEstados.map(e => <option key={e} value={e}>{e}</option>)}</select>
-                <select className="w-1/2 text-xs p-2 border rounded-lg bg-white" onChange={e => setFiltroServico(e.target.value)} value={filtroServico}><option value="">Serviços</option>{todosServicos.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                <MultiSelect 
+                    label="Estados" 
+                    options={todosEstados} 
+                    selected={filtrosEstados} 
+                    onChange={setFiltrosEstados} 
+                />
+                <MultiSelect 
+                    label="Serviços" 
+                    options={todosServicos} 
+                    selected={filtrosServicos} 
+                    onChange={setFiltrosServicos} 
+                />
              </div>
           </div>
           <div className="flex gap-2 mt-2">
@@ -109,21 +188,23 @@ const AbaParceiros = () => {
             <button onClick={() => { setParceiroParaEditar(null); setMostrarModal(true); }} className="w-2/3 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg flex items-center justify-center gap-2 font-medium text-sm"><Plus size={16} /> Novo Parceiro</button>
           </div>
         </div>
+        
+        {/* LISTA DE PARCEIROS */}
         <div className="overflow-y-auto flex-1 p-2 space-y-2 scrollbar-thin bg-gray-50">
           {loading ? <p className="text-center text-gray-400 mt-10">Carregando...</p> : parceirosFiltrados.map((p) => (
               <div key={p.id} onClick={() => setParceiroSelecionado(p)} className={`p-3 rounded-xl cursor-pointer border transition-all hover:shadow-md ${parceiroSelecionado?.id === p.id ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'bg-white border-gray-200'}`}>
                 <div className="flex justify-between items-start">
                   <span className="font-bold text-gray-800 text-sm truncate">{p.empresa}</span>
-               // Procure este trecho dentro do parceirosFiltrados.map(...)
-<span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-  p.status === 'Diamante' ? 'bg-cyan-100 text-cyan-700' :
-  p.status === 'Ouro' ? 'bg-yellow-100 text-yellow-700' :
-  p.status === 'Prata' ? 'bg-gray-200 text-gray-600' :
-  p.status === 'Bronze' ? 'bg-orange-100 text-orange-700' :
-  'bg-blue-50 text-blue-600' // Cor padrão para "Em análise" ou outros
-}`}>
-  {p.status}
-</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                      p.status === 'Diamante' ? 'bg-cyan-100 text-cyan-700' : 
+                      p.status === 'Ouro' ? 'bg-yellow-100 text-yellow-700' : 
+                      p.status === 'Prata' ? 'bg-gray-200 text-gray-600' : 
+                      p.status === 'Bronze' ? 'bg-orange-100 text-orange-700' : 
+                      'bg-blue-50 text-blue-600'
+                  }`}>
+                      {p.status}
+                  </span>
+                </div>
                 <div className="flex items-center gap-1 mt-1 flex-wrap">{p.estados_lista && p.estados_lista.slice(0, 4).map(uf => (<span key={uf} className="text-[10px] bg-gray-100 text-gray-600 px-1 rounded border border-gray-200">{uf}</span>))}</div>
               </div>
           ))}
@@ -147,13 +228,11 @@ const AbaParceiros = () => {
                      {parceiroSelecionado.estados_lista && parceiroSelecionado.estados_lista.map(uf => (<span key={uf} className="flex items-center gap-1 text-xs font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-md border border-blue-100">{uf}</span>))}
                   </div>
 
-                  {/* NOVOS DADOS DE CONTATO */}
                   <div className="flex flex-col gap-1 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-100 w-fit">
                     <span className="flex items-center gap-2 font-bold text-gray-800"><User size={14}/> {parceiroSelecionado.contato_nome || "Sem contato"}</span>
                     {parceiroSelecionado.email && <span className="flex items-center gap-2"><Mail size={14} className="text-gray-400"/> {parceiroSelecionado.email}</span>}
                     {parceiroSelecionado.telefone && <span className="flex items-center gap-2"><Phone size={14} className="text-gray-400"/> {parceiroSelecionado.telefone}</span>}
                   </div>
-
                 </div>
                 <div className="flex flex-col items-end gap-3">
                   <div className="text-right">
@@ -169,7 +248,6 @@ const AbaParceiros = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* PROGRESSO */}
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-4"><TrendingUp size={18} className="text-green-500"/> Progresso</h3>
                 <div className="flex justify-between text-xs font-bold text-gray-500 uppercase mb-2">
@@ -180,10 +258,8 @@ const AbaParceiros = () => {
                 </div>
               </div>
 
-              {/* CARD DE VENCIMENTO CORRIGIDO */}
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
                  <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-2"><Clock size={18} className="text-orange-500"/> Próximo Vencimento</h3>
-                 
                  {parceiroSelecionado.vencimento_info ? (
                    <div className="flex justify-between items-center mt-2">
                      <div>
@@ -204,7 +280,6 @@ const AbaParceiros = () => {
               </div>
             </div>
 
-            {/* TABELA E SERVIÇOS (MANTIDOS) */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><History size={18} className="text-purple-500"/> Histórico de Pontuação</h3>
                 <div className="overflow-hidden rounded-lg border border-gray-100">
