@@ -27,19 +27,26 @@ class Parceiro(models.Model):
         total = self.historico.filter(data__gte=data_limite).aggregate(models.Sum('pontos'))['pontos__sum']
         return total or 0.00
 
-    @property
+ @property
     def proximo_vencimento(self):
-        """Calcula quando os próximos pontos vão expirar"""
+        """Calcula expiração agrupando por dia"""
         data_limite = timezone.now().date() - timedelta(days=90)
-        # Pega a indicação válida mais antiga (a próxima a vencer)
-        indicao_mais_antiga = self.historico.filter(data__gte=data_limite).order_by('data').first()
+        
+        # 1. Pega a data da indicação mais antiga que AINDA é válida
+        primeira_indicao = self.historico.filter(data__gte=data_limite).order_by('data').first()
 
-        if indicao_mais_antiga:
-            data_expiracao = indicao_mais_antiga.data + timedelta(days=90)
+        if primeira_indicao:
+            data_do_lote = primeira_indicao.data
+            
+            # 2. Soma TODOS os pontos que foram feitos nesse mesmo dia
+            total_pontos_lote = self.historico.filter(data=data_do_lote).aggregate(models.Sum('pontos'))['pontos__sum']
+            
+            data_expiracao = data_do_lote + timedelta(days=90)
             dias_restantes = (data_expiracao - timezone.now().date()).days
+            
             return {
                 "dias": max(dias_restantes, 0),
-                "pontos": indicao_mais_antiga.pontos,
+                "pontos": total_pontos_lote, # Retorna a SOMA (ex: 4.80) e não só o unitário
                 "data_vencimento": data_expiracao
             }
         return None
