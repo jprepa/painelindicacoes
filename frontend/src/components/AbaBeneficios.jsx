@@ -91,7 +91,7 @@ const AbaBeneficios = () => {
                 </h4>
                 
                 <p className="text-sm text-gray-500">
-                    Comece a Indicar agora mesmo e sua categoria muda rapidamente
+                    Comece a Indicar agora mesmo e suba rapidamente sua categoria 
                 </p>
             </div>
 
