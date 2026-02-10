@@ -27,7 +27,7 @@ const AbaBeneficios = () => {
         
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold text-gray-800">Tabela de Categorias e Benefícios 🚀</h1>
-          <p className="text-gray-500">Regras e recompensas do Programa de Parceiros Prevision</p>
+          <p className="text-gray-500">Categorias e Recompensas do Programa de Parceiros Prevision</p>
         </div>
 
         {/* TABELA DE CARDS */}
