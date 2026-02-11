@@ -9,7 +9,7 @@ const AbaQualificacao = () => {
   const [status, setStatus] = useState("idle");
 
   // Link direto para o SharePoint
-  const LINK_BASE_PADRAO = "https://poligraph-my.sharepoint.com/:x:/g/personal/joao_prado_softplan_com_br/IQCYo2GT4OAwQ4VBgo8XF0-aAcpsd1ou9e-q-ieRZ6fwMPk?e=vCgHWl";
+  const LINK_BASE_PADRAO = "https://1drv.ms/x/c/c251698cbde8c1d1/IQDAq_KcH8PZQ4NzAOYk-nxGAWzHB6l4njKNJ514LHf-5KI?e=wKoo7L";
 
   const processarLista = async () => {
     if (!arquivoLeads) return;
@@ -54,7 +54,7 @@ const AbaQualificacao = () => {
         
         <h1 className="text-2xl font-bold text-gray-800 mb-2">Agente de Qualificação R&E</h1>
         <p className="text-gray-500 mb-8">
-          Cruza dados da web e verifica duplicidade com base de Clientes/CRM
+          Cruza dados na web, base de Clientes e CRM
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -66,7 +66,7 @@ const AbaQualificacao = () => {
                 </p>
                 {!arquivoLeads ? (
                     <>
-                        <p className="text-xs text-gray-400">Respeitar regras colunas A-E </p>
+                        <p className="text-xs text-gray-400">Baixar e Adicionar na Planilha Qualificada, em "Base Ecossistema" </p>
                         <input type="file" accept=".xlsx" onChange={(e) => {setArquivoLeads(e.target.files[0]); setStatus("idle")}} className="absolute inset-0 opacity-0 cursor-pointer" />
                     </>
                 ) : (
