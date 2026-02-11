@@ -66,7 +66,7 @@ const AbaQualificacao = () => {
                 </p>
                 {!arquivoLeads ? (
                     <>
-                        <p className="text-xs text-gray-400">Baixar e Adicionar na Planilha Qualificada, em "Base Ecossistema" </p>
+                        <p className="text-xs text-gray-400">Respeitar regras colunas A-E  </p>
                         <input type="file" accept=".xlsx" onChange={(e) => {setArquivoLeads(e.target.files[0]); setStatus("idle")}} className="absolute inset-0 opacity-0 cursor-pointer" />
                     </>
                 ) : (
@@ -85,7 +85,7 @@ const AbaQualificacao = () => {
                     </p>
                     {!arquivoClientes ? (
                         <>
-                            <p className="text-xs text-gray-400">CNPJs na Coluna B</p>
+                            <p className="text-xs text-gray-400">Baixar e Adicionar na Planilha Qualificada, em "Base Ecossistema"</p>
                             <input type="file" accept=".xlsx" onChange={(e) => setArquivoClientes(e.target.files[0])} className="absolute inset-0 opacity-0 cursor-pointer" />
                         </>
                     ) : (
