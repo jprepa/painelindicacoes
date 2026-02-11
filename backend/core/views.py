@@ -125,16 +125,15 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             return Response(self.get_serializer(parceiro).data)
         except Exception as e: return Response({"erro": str(e)}, status=500)
 
-    # --- AGENTE DE LEADS 14.0 (SUPER LEVE 🍃) ---
+    # --- AGENTE DE LEADS 16.0 (COM FÓRMULAS DE ECOSSISTEMA) ---
     @action(detail=False, methods=['post'])
     def qualificar_leads(self, request):
         file_leads = request.FILES.get('file')
-        # file_clientes REMOVIDO PARA ECONOMIZAR MEMÓRIA
+        # file_clientes não é mais necessário aqui, pois faremos via Excel
 
         if not file_leads: return Response({"erro": "Arquivo de leads não enviado"}, status=400)
 
         # 1. CARREGA PIPEDRIVE (Histórico Completo)
-        # Nota: Seu services.py já deve estar atualizado com o MAPA_IDS_PIPEDRIVE que te enviei
         print("--- Consultando Pipedrive ---")
         crm_por_cnpj, crm_por_nome = buscar_dados_pipedrive(TOKEN_PIPEDRIVE)
         
@@ -149,6 +148,9 @@ class ParceiroViewSet(viewsets.ModelViewSet):
         
         headers_serper = {'X-API-KEY': API_KEY_SERPER, 'Content-Type': 'application/json'}
         url_search = "https://google.serper.dev/search"
+
+        # Lista para armazenar as linhas processadas
+        output_rows = []
 
         for index, row in df.iterrows():
             empresa_nome = str(row[coluna_empresa]).strip()
@@ -206,24 +208,19 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 status_crm = "ENCONTRADO (Nome)"
 
             if matches:
-                # Ordena por data (mais recente primeiro)
                 matches.sort(key=lambda x: x.get('data_criacao', ''), reverse=True)
                 mais_recente = matches[0]
                 
-                # Dados do Card Recente
                 data_ultimo_card = mais_recente.get('data_criacao', '')[:10]
                 tipo_empresa_ultimo = mais_recente.get('tipo_empresa', '')
                 link_ultimo_card = mais_recente.get('link', '')
 
-                # Status (Alerta se tiver aberto)
                 tem_aberto = any(m.get('status') == 'open' for m in matches)
                 if tem_aberto: status_crm = "EM ABERTO (Não Prospectar)"
                 else: status_crm = f"JÁ NEGOCIADO (Último: {data_ultimo_card})"
 
                 contato_crm = ", ".join({m['contato'] for m in matches if m['contato'] != "Sem Contato"})
                 links_crm = " | ".join([m['link'] for m in matches])
-                
-                # Histórico de Inteligência (ERP, Produtos, Tipologia)
                 for m in matches:
                     if m.get('erp'): hist_erp.add(m['erp'])
                     if m.get('produto'): hist_produto.add(m['produto'])
@@ -242,25 +239,77 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             elif any(x in txt for x in ['edific', 'residencial', 'incorp']): tipologia_site = "vertical"
             elif any(x in txt for x in ['industria', 'galpao']): tipologia_site = "industrial"
 
-            # --- PREENCHIMENTO EXCEL FINAL (Somente dados gerados pelo Python) ---
-            df.at[index, 'CNPJ Encontrado'] = cnpj_matriz_final
-            df.at[index, 'Atividade Principal'] = atividade
-            df.at[index, 'Site'] = site_final
+            # --- CONSTRUÇÃO DAS LINHAS COM FÓRMULAS ---
+            # Linha atual no Excel (cabeçalho é 1, dados começam na 2)
+            row_excel = index + 2 
             
-            # Pipedrive (Traduzido pelo services.py)
-            df.at[index, 'Status CRM'] = status_crm
-            df.at[index, 'Data Último Card'] = data_ultimo_card
-            df.at[index, 'Tipo Empresa (CRM)'] = tipo_empresa_ultimo
-            df.at[index, 'Link Último Card'] = link_ultimo_card
+            # A chave de busca (CNPJ Encontrado) estará na coluna F (6ª coluna)
+            # Sintaxe: =VLOOKUP(F2, 'Base Ecossistema'!A:P, COLUNA, FALSE)
             
-            df.at[index, 'Contato CRM'] = contato_crm
-            df.at[index, 'Histórico ERP'] = ", ".join(hist_erp)
-            df.at[index, 'Histórico Produtos'] = ", ".join(hist_produto)
-            df.at[index, 'Tipologia (Web)'] = tipologia_site
+            # Mapeamento dos índices baseado na sua imagem (Planilha Clientes Ecossistema 2):
+            # A=CNPJ, B=Porte, C=Sienge, D=Construcompras, E=Construmanager, F=Construpoint
+            # G=CV, H=Prevision, I=GO, J=MRR Sienge, K=MRR Construcompras, L=MRR Construmanager
+            # M=MRR Construpoint, N=MRR CV, O=MRR Prevision, P=MRR GO
             
-            # NOTA: O Usuário fará o PROCV com a Base Ecossistema no Excel
+            def gerar_vlookup(col_index):
+                # Usa ponto e vírgula se seu Excel for BR, ou vírgula se for US.
+                # O Excel geralmente converte automático, mas VLOOKUP (inglês) pede vírgula.
+                # Se der erro #NOME?, o Excel pode estar esperando PROCV e ponto-e-vírgula.
+                # Vamos mandar o padrão universal em inglês com vírgulas.
+                return f"=IFERROR(VLOOKUP(F{row_excel}, 'Base Ecossistema'!A:P, {col_index}, FALSE), \"\")"
 
+            output_rows.append({
+                # --- DADOS ORIGINAIS ---
+                'Email': row.get(df.columns[0]), 
+                'Nome': row.get(df.columns[1]),
+                'Telefone': row.get(df.columns[2]),
+                'Cargo': row.get(df.columns[3]),
+                'Empresa': empresa_nome,
+                
+                # --- DADOS GERADOS (PYTHON) ---
+                'CNPJ Encontrado': cnpj_matriz_final, # COLUNA F (Chave do PROCV)
+                'Atividade': atividade,
+                'Site': site_final,
+                'Status CRM': status_crm,
+                'Data Card': data_ultimo_card,
+                'Tipo Emp': tipo_empresa_ultimo,
+                'Link Card': link_ultimo_card,
+                'Contato CRM': contato_crm,
+                'Hist. ERP': ", ".join(hist_erp),
+                'Hist. Prod': ", ".join(hist_produto),
+                'Tipologia': tipologia_site,
+                
+                # --- FÓRMULAS (ECOSSISTEMA) ---
+                'Porte':           gerar_vlookup(2),  # Coluna B
+                'Status Sienge':   gerar_vlookup(3),  # Coluna C
+                'S. Construcompras': gerar_vlookup(4), # Coluna D
+                'S. Construmanager': gerar_vlookup(5), # Coluna E
+                'S. Construpoint': gerar_vlookup(6),  # Coluna F
+                'Status CV':       gerar_vlookup(7),  # Coluna G
+                'Status Prevision': gerar_vlookup(8), # Coluna H
+                'Status GO':       gerar_vlookup(9),  # Coluna I
+                'MRR Sienge':      gerar_vlookup(10), # Coluna J
+                'MRR Constrcomp':  gerar_vlookup(11), # Coluna K
+                'MRR Constrmanag': gerar_vlookup(12), # Coluna L
+                'MRR Constrpoint': gerar_vlookup(13), # Coluna M
+                'MRR CV':          gerar_vlookup(14), # Coluna N
+                'MRR Prevision':   gerar_vlookup(15), # Coluna O
+                'MRR GO':          gerar_vlookup(16)  # Coluna P
+            })
+
+        # --- EXPORTAÇÃO ---
+        df_final = pd.DataFrame(output_rows)
+        
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = 'attachment; filename=leads_inteligentes.xlsx'
-        df.to_excel(response, index=False)
+        response['Content-Disposition'] = 'attachment; filename=leads_inteligentes_v16.xlsx'
+        
+        # Escreve o arquivo com duas abas
+        with pd.ExcelWriter(response, engine='xlsxwriter') as writer:
+            df_final.to_excel(writer, sheet_name='Leads Qualificados', index=False)
+            
+            # Cria a aba vazia para você colar os dados
+            workbook = writer.book
+            worksheet_base = workbook.add_worksheet('Base Ecossistema')
+            worksheet_base.write('A1', 'COLE AQUI A BASE DO ECOSSISTEMA (Coluna A deve ser o CNPJ)')
+            
         return response
