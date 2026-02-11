@@ -39,8 +39,8 @@ def consultar_pipedrive_pontual(api_token, cnpj_busca, nome_busca):
     Retorna o histórico consolidado e dados do último card.
     """
     
-    # HASHES (MANTIDOS)
-    CAMPO_CNPJ_HASH = '39fa8d7e6f5c4b3a2190846067756f642468305c' # Confirme se é este
+    # HASHES
+    CAMPO_CNPJ_HASH = '39fa8d7e6f5c4b3a2190846067756f642468305c' 
     CAMPO_ERP_HASH = '4691b401ffd1480fe76ea54ebfc0c6358bb42afb'
     CAMPO_PRODUTO_HASH = 'f01c7923ea23a7a30659792ffd5f38f3773e455a'
     CAMPO_TIPOLOGIA_HASH = '04ca3f3994424d148ae157aa38a0ed051abc0c09'
@@ -52,55 +52,44 @@ def consultar_pipedrive_pontual(api_token, cnpj_busca, nome_busca):
     except:
         domain = 'app'
 
-    # 1. Tenta buscar pelo CNPJ primeiro
-    items_encontrados = []
-    
     # Função interna para fazer a busca na API
     def buscar_na_api(termo):
         if not termo or len(termo) < 3: return []
         url_search = "https://api.pipedrive.com/v1/deals/search"
-        params = {'term': termo, 'api_token': api_token, 'limit': 10} # Traz até 10 matches
+        params = {'term': termo, 'api_token': api_token, 'limit': 5} # Traz até 5 matches
         try:
             r = requests.get(url_search, params=params, timeout=5)
             data = r.json().get('data', {}).get('items', [])
             return [i['item'] for i in data if i['item']['type'] == 'deal']
         except: return []
 
-    # Busca por CNPJ
+    # 1. Busca por CNPJ (Prioridade)
     deals_raw = buscar_na_api(cnpj_busca)
     
-    # Se não achou por CNPJ, tenta pelo Nome
+    # 2. Se não achou por CNPJ, tenta pelo Nome
     if not deals_raw and nome_busca:
         deals_raw = buscar_na_api(nome_busca)
 
-    # Se ainda não achou nada
     if not deals_raw:
         return None
 
-    # 2. Processa os resultados (Busca detalhe de cada Deal para pegar campos customizados)
-    # A busca do Pipedrive retorna resumo, precisamos do detalhe para ter certeza dos campos custom
-    
+    # 3. Processa os resultados (Busca detalhe de cada Deal)
     historico_matches = []
     
     for item in deals_raw:
         deal_id = item['id']
-        # Faz uma chamada leve para pegar os detalhes deste deal específico
         try:
             r_detalhe = requests.get(f"https://api.pipedrive.com/v1/deals/{deal_id}", params={'api_token': api_token})
             deal = r_detalhe.json().get('data')
             if not deal: continue
 
-            # Extrai dados
             nome_org = deal.get('org_id', {}).get('name', 'Sem Nome') if deal.get('org_id') else 'Sem Nome'
             nome_pessoa = deal.get('person_id', {}).get('name', 'Sem Contato') if deal.get('person_id') else 'Sem Contato'
-            
-            # Formata data
-            data_criacao = deal.get('add_time', '')
             
             info = {
                 'id': deal_id,
                 'status': deal.get('status'),
-                'data_criacao': data_criacao,
+                'data_criacao': deal.get('add_time', ''),
                 'nome_crm': nome_org,
                 'contato': nome_pessoa,
                 'link': f"https://{domain}.pipedrive.com/deal/{deal_id}",
@@ -114,18 +103,16 @@ def consultar_pipedrive_pontual(api_token, cnpj_busca, nome_busca):
 
     if not historico_matches: return None
 
-    # 3. Consolida os dados (Lógica do Agente)
+    # 4. Consolida os dados
     historico_matches.sort(key=lambda x: x.get('data_criacao', ''), reverse=True)
     mais_recente = historico_matches[0]
 
     tem_aberto = any(m['status'] == 'open' for m in historico_matches)
     status_final = "EM ABERTO (Não Prospectar)" if tem_aberto else f"JÁ NEGOCIADO (Último: {mais_recente['data_criacao'][:10]})"
 
-    # Acumula histórico
     erp_set = {m['erp'] for m in historico_matches if m['erp']}
     prod_set = {m['produto'] for m in historico_matches if m['produto']}
     contato_set = {m['contato'] for m in historico_matches if m['contato'] != "Sem Contato"}
-    links_list = [m['link'] for m in historico_matches]
 
     return {
         'status_crm': status_final,
