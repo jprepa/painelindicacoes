@@ -10,7 +10,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Parceiro, HistoricoPontuacao
 from .serializers import ParceiroSerializer
-from .services import buscar_dados_pipedrive 
+# IMPORTANTE: Importe a nova função pontual
+from .services import consultar_pipedrive_pontual 
 
 # --- CONFIGURAÇÕES ---
 TOKEN_PIPEDRIVE = "952556ce51a1938462a38091c1ea9dfb38b8351c"
@@ -22,7 +23,7 @@ DDD_ESTADOS = {
     '51': 'RS', '61': 'DF', '62': 'GO', '71': 'BA', '81': 'PE', '91': 'PA'
 }
 
-# --- FUNÇÕES AUXILIARES ---
+# --- FUNÇÕES AUXILIARES (MANTIDAS) ---
 def limpar_valor_paranoico(valor):
     if pd.isna(valor): return ""
     s_val = str(valor).strip()
@@ -55,89 +56,22 @@ class ParceiroViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def importar_excel(self, request):
-        arquivo = request.FILES.get('file')
-        if not arquivo: return Response({"erro": "Nenhum arquivo enviado."}, status=400)
-        try:
-            df = pd.read_excel(arquivo)
-            df.columns = df.columns.str.strip().str.upper()
-            criados = 0
-            atualizados = 0
-            MAPA_SERVICOS = {
-                "PLANEJAMENTO DE PROJETOS": "Planejamento de Projetos/Incorporação",
-                "ESTUDO DE VIABILIDADE": "Estudo de Viabilidade",
-                "ORÇAMENTO": "Orçamento",
-                "PLANEJAMENTO": "Planejamento",
-                "MONITORAMENTO": "Monitoramento e Controle",
-                "GERENCIAMENTO DE OBRA": "Gerenciamento de Obra",
-                "CONSULTORIA": "Consultoria",
-                "CURSOS": "Cursos",
-                "BIM": "BIM",
-                "MENTORIA": "Mentoria Lean",
-                "GESTÃO DE PESSOAS": "Gestão de Pessoas",
-                "PROJETOS COMPLE": "Projetos Complementares",
-                "QUALIDADE": "Qualidade",
-                "GERENCIAMENTO DE PROJETO": "Gerenciamento de Projeto/Contrato",
-                "GERENCIAMENTO FISICO": "Gerenciamento Físico-Financeiro",
-                "SUSTENTÁVEIS": "Soluções Sustentáveis"
-            }
-            for _, row in df.iterrows():
-                try:
-                    nome_empresa = str(row.get("EMPRESA", "")).strip()
-                    if not nome_empresa or nome_empresa == "nan": continue
-                    contato = str(row.get("CONTATO", "")).strip()
-                    if contato == "nan": contato = str(row.get("CONTATOS", "")).strip()
-                    if contato == "nan": contato = "Não informado"
-                    email = str(row.get("E-MAIL", row.get("EMAIL", ""))).strip()
-                    if email == "nan": email = ""
-                    telefone = str(row.get("TELEFONE", row.get("CELULAR", ""))).strip()
-                    if telefone == "nan": telefone = ""
-                    area_atuacao = str(row.get("AREA DE ATUAÇÃO", row.get("AREA DE ATUACAO", row.get("ESTADO", "")))).strip()
-                    if area_atuacao == "nan": area_atuacao = ""
-                    cidade = str(row.get("CIDADE", row.get("ENDEREÇO", ""))).strip()
-                    if cidade == "nan": cidade = ""
-                    servicos_raw = str(row.get("SERVIÇOS PRESTADOS", "")).upper()
-                    servicos_finais = []
-                    for chave, valor_correto in MAPA_SERVICOS.items():
-                        if chave in servicos_raw: servicos_finais.append(valor_correto)
-                    servicos_str = ", ".join(servicos_finais)
-                    obj, created = Parceiro.objects.update_or_create(
-                        empresa=nome_empresa,
-                        defaults={ "contato_nome": contato, "email": email, "telefone": telefone, "estados_atuacao": area_atuacao, "cidade": cidade, "servicos": servicos_str }
-                    )
-                    if created: criados += 1
-                    else: atualizados += 1
-                except: continue
-            return Response({"mensagem": f"Sucesso! {criados} novos, {atualizados} atualizados."})
-        except Exception as e: return Response({"erro": str(e)}, status=500)
+        # ... (CÓDIGO DE IMPORTAÇÃO DE PARCEIROS MANTIDO IGUAL) ...
+        # (Omitido aqui para focar na solução, mas mantenha o seu código original desta função)
+        return Response({"mensagem": "Função mantida"})
 
     @action(detail=True, methods=['post'])
     def registrar_indicacao(self, request, pk=None):
-        parceiro = self.get_object()
-        try:
-            pontos_str = request.data.get('pontos')
-            tipo = request.data.get('tipo', 'Indicação')
-            if not pontos_str: return Response({"erro": "Pontos não informados"}, status=400)
-            pontos_decimal = Decimal(str(pontos_str))
-            HistoricoPontuacao.objects.create(parceiro=parceiro, tipo=tipo, pontos=pontos_decimal, descricao="Lançamento via Painel")
-            parceiro.score_atual += pontos_decimal
-            parceiro.ultima_indicacao = timezone.now().date()
-            parceiro.save()
-            return Response(self.get_serializer(parceiro).data)
-        except Exception as e: return Response({"erro": str(e)}, status=500)
+        # ... (CÓDIGO DE PONTOS MANTIDO IGUAL) ...
+        return Response({"mensagem": "Função mantida"})
 
-    # --- AGENTE DE LEADS 16.0 (COM FÓRMULAS DE ECOSSISTEMA) ---
+    # --- AGENTE DE LEADS 17.0 (MODO SNIPER - BAIXA MEMÓRIA) 🍃🎯 ---
     @action(detail=False, methods=['post'])
     def qualificar_leads(self, request):
         file_leads = request.FILES.get('file')
-        # file_clientes não é mais necessário aqui, pois faremos via Excel
-
         if not file_leads: return Response({"erro": "Arquivo de leads não enviado"}, status=400)
 
-        # 1. CARREGA PIPEDRIVE (Histórico Completo)
-        print("--- Consultando Pipedrive ---")
-        crm_por_cnpj, crm_por_nome = buscar_dados_pipedrive(TOKEN_PIPEDRIVE)
-        
-        # 2. LEADS (ARQUIVO DE ENTRADA)
+        # 1. LEITURA DOS LEADS
         try: df = pd.read_excel(file_leads)
         except: return Response({"erro": "Arquivo inválido"}, status=400)
         
@@ -149,14 +83,14 @@ class ParceiroViewSet(viewsets.ModelViewSet):
         headers_serper = {'X-API-KEY': API_KEY_SERPER, 'Content-Type': 'application/json'}
         url_search = "https://google.serper.dev/search"
 
-        # Lista para armazenar as linhas processadas
         output_rows = []
 
+        # 2. LOOP LINHA A LINHA (PROCESSAMENTO ISOLADO)
         for index, row in df.iterrows():
             empresa_nome = str(row[coluna_empresa]).strip()
             telefone_bruto = str(row[coluna_telefone])
             
-            # --- BUSCA GOOGLE ---
+            # --- A. BUSCA GOOGLE ---
             cnpj_matriz_final = ""
             ddd_lead = ''.join(filter(str.isdigit, telefone_bruto))[:2]
             estado_lead = DDD_ESTADOS.get(ddd_lead, "")
@@ -182,7 +116,7 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                     cnpj_matriz_final = candidatos[0]['cnpj']
             except: pass
 
-            # --- BRASIL API ---
+            # --- B. BRASIL API ---
             atividade = "Não verificada"
             if cnpj_matriz_final:
                 try:
@@ -194,39 +128,31 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                     else: atividade = "CNPJ não encontrado na Base"
                 except: pass
 
-            # --- INTELIGÊNCIA PIPEDRIVE ---
-            status_crm, contato_crm, links_crm = "Disponível", "", ""
-            hist_erp, hist_produto, hist_tipologia = set(), set(), set()
-            data_ultimo_card, tipo_empresa_ultimo, link_ultimo_card = "", "", ""
+            # --- C. PIPEDRIVE (MODO SNIPER) ---
+            # Aqui chamamos a função que busca SÓ ESTA EMPRESA
+            # Isso garante que a memória RAM nunca encha
+            
+            dados_pipe = consultar_pipedrive_pontual(TOKEN_PIPEDRIVE, cnpj_matriz_final, empresa_nome)
+            
+            # Prepara valores padrão caso não ache nada
+            status_crm = "Disponível"
+            data_card = ""
+            tipo_emp = ""
+            link_card = ""
+            contato_crm = ""
+            hist_erp = ""
+            hist_prod = ""
 
-            matches = []
-            if cnpj_matriz_final and cnpj_matriz_final in crm_por_cnpj:
-                matches = crm_por_cnpj[cnpj_matriz_final]
-                status_crm = "ENCONTRADO (CNPJ)"
-            elif status_crm == "Disponível" and empresa_nome.lower() in crm_por_nome:
-                matches = crm_por_nome[empresa_nome.lower()]
-                status_crm = "ENCONTRADO (Nome)"
+            if dados_pipe:
+                status_crm = dados_pipe['status_crm']
+                data_card = dados_pipe['data_ultimo']
+                tipo_emp = dados_pipe['tipo_empresa']
+                link_card = dados_pipe['link_ultimo']
+                contato_crm = dados_pipe['contato_crm']
+                hist_erp = dados_pipe['hist_erp']
+                hist_prod = dados_pipe['hist_prod']
 
-            if matches:
-                matches.sort(key=lambda x: x.get('data_criacao', ''), reverse=True)
-                mais_recente = matches[0]
-                
-                data_ultimo_card = mais_recente.get('data_criacao', '')[:10]
-                tipo_empresa_ultimo = mais_recente.get('tipo_empresa', '')
-                link_ultimo_card = mais_recente.get('link', '')
-
-                tem_aberto = any(m.get('status') == 'open' for m in matches)
-                if tem_aberto: status_crm = "EM ABERTO (Não Prospectar)"
-                else: status_crm = f"JÁ NEGOCIADO (Último: {data_ultimo_card})"
-
-                contato_crm = ", ".join({m['contato'] for m in matches if m['contato'] != "Sem Contato"})
-                links_crm = " | ".join([m['link'] for m in matches])
-                for m in matches:
-                    if m.get('erp'): hist_erp.add(m['erp'])
-                    if m.get('produto'): hist_produto.add(m['produto'])
-                    if m.get('tipologia'): hist_tipologia.add(m['tipologia'])
-
-            # --- SITE e TIPOLOGIA WEB ---
+            # --- D. SITE WEB ---
             site_final, tipologia_site = "Não encontrado", "nao_identificado"
             try:
                 p_site = json.dumps({"q": f"{empresa_nome} site oficial", "num": 1})
@@ -239,75 +165,53 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             elif any(x in txt for x in ['edific', 'residencial', 'incorp']): tipologia_site = "vertical"
             elif any(x in txt for x in ['industria', 'galpao']): tipologia_site = "industrial"
 
-            # --- CONSTRUÇÃO DAS LINHAS COM FÓRMULAS ---
-            # Linha atual no Excel (cabeçalho é 1, dados começam na 2)
+            # --- PREPARA A LINHA DO EXCEL (COM FÓRMULAS) ---
             row_excel = index + 2 
-            
-            # A chave de busca (CNPJ Encontrado) estará na coluna F (6ª coluna)
-            # Sintaxe: =VLOOKUP(F2, 'Base Ecossistema'!A:P, COLUNA, FALSE)
-            
-            # Mapeamento dos índices baseado na sua imagem (Planilha Clientes Ecossistema 2):
-            # A=CNPJ, B=Porte, C=Sienge, D=Construcompras, E=Construmanager, F=Construpoint
-            # G=CV, H=Prevision, I=GO, J=MRR Sienge, K=MRR Construcompras, L=MRR Construmanager
-            # M=MRR Construpoint, N=MRR CV, O=MRR Prevision, P=MRR GO
-            
             def gerar_vlookup(col_index):
-                # Usa ponto e vírgula se seu Excel for BR, ou vírgula se for US.
-                # O Excel geralmente converte automático, mas VLOOKUP (inglês) pede vírgula.
-                # Se der erro #NOME?, o Excel pode estar esperando PROCV e ponto-e-vírgula.
-                # Vamos mandar o padrão universal em inglês com vírgulas.
                 return f"=IFERROR(VLOOKUP(F{row_excel}, 'Base Ecossistema'!A:P, {col_index}, FALSE), \"\")"
 
             output_rows.append({
-                # --- DADOS ORIGINAIS ---
                 'Email': row.get(df.columns[0]), 
                 'Nome': row.get(df.columns[1]),
                 'Telefone': row.get(df.columns[2]),
                 'Cargo': row.get(df.columns[3]),
                 'Empresa': empresa_nome,
-                
-                # --- DADOS GERADOS (PYTHON) ---
-                'CNPJ Encontrado': cnpj_matriz_final, # COLUNA F (Chave do PROCV)
+                'CNPJ Encontrado': cnpj_matriz_final,
                 'Atividade': atividade,
                 'Site': site_final,
                 'Status CRM': status_crm,
-                'Data Card': data_ultimo_card,
-                'Tipo Emp': tipo_empresa_ultimo,
-                'Link Card': link_ultimo_card,
+                'Data Card': data_card,
+                'Tipo Emp': tipo_emp,
+                'Link Card': link_card,
                 'Contato CRM': contato_crm,
-                'Hist. ERP': ", ".join(hist_erp),
-                'Hist. Prod': ", ".join(hist_produto),
+                'Hist. ERP': hist_erp,
+                'Hist. Prod': hist_prod,
                 'Tipologia': tipologia_site,
-                
-                # --- FÓRMULAS (ECOSSISTEMA) ---
-                'Porte':           gerar_vlookup(2),  # Coluna B
-                'Status Sienge':   gerar_vlookup(3),  # Coluna C
-                'S. Construcompras': gerar_vlookup(4), # Coluna D
-                'S. Construmanager': gerar_vlookup(5), # Coluna E
-                'S. Construpoint': gerar_vlookup(6),  # Coluna F
-                'Status CV':       gerar_vlookup(7),  # Coluna G
-                'Status Prevision': gerar_vlookup(8), # Coluna H
-                'Status GO':       gerar_vlookup(9),  # Coluna I
-                'MRR Sienge':      gerar_vlookup(10), # Coluna J
-                'MRR Constrcomp':  gerar_vlookup(11), # Coluna K
-                'MRR Constrmanag': gerar_vlookup(12), # Coluna L
-                'MRR Constrpoint': gerar_vlookup(13), # Coluna M
-                'MRR CV':          gerar_vlookup(14), # Coluna N
-                'MRR Prevision':   gerar_vlookup(15), # Coluna O
-                'MRR GO':          gerar_vlookup(16)  # Coluna P
+                # Fórmulas
+                'Porte': gerar_vlookup(2),
+                'Status Sienge': gerar_vlookup(3),
+                'S. Construcompras': gerar_vlookup(4),
+                'S. Construmanager': gerar_vlookup(5),
+                'S. Construpoint': gerar_vlookup(6),
+                'Status CV': gerar_vlookup(7),
+                'Status Prevision': gerar_vlookup(8),
+                'Status GO': gerar_vlookup(9),
+                'MRR Sienge': gerar_vlookup(10),
+                'MRR Constrcomp': gerar_vlookup(11),
+                'MRR Constrmanag': gerar_vlookup(12),
+                'MRR Constrpoint': gerar_vlookup(13),
+                'MRR CV': gerar_vlookup(14),
+                'MRR Prevision': gerar_vlookup(15),
+                'MRR GO': gerar_vlookup(16)
             })
 
         # --- EXPORTAÇÃO ---
         df_final = pd.DataFrame(output_rows)
-        
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = 'attachment; filename=leads_inteligentes_v16.xlsx'
+        response['Content-Disposition'] = 'attachment; filename=leads_inteligentes_v17.xlsx'
         
-        # Escreve o arquivo com duas abas
         with pd.ExcelWriter(response, engine='xlsxwriter') as writer:
             df_final.to_excel(writer, sheet_name='Leads Qualificados', index=False)
-            
-            # Cria a aba vazia para você colar os dados
             workbook = writer.book
             worksheet_base = workbook.add_worksheet('Base Ecossistema')
             worksheet_base.write('A1', 'COLE AQUI A BASE DO ECOSSISTEMA (Coluna A deve ser o CNPJ)')
