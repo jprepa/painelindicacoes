@@ -15,7 +15,7 @@ from .services import consultar_pipedrive_pontual
 
 # --- CONFIGURAÇÕES ---
 TOKEN_PIPEDRIVE = "952556ce51a1938462a38091c1ea9dfb38b8351c"
-API_KEY_SERPER = "5857e258a648118c2bc2d3c11f27ec1c54126b96"
+API_KEY_SERPER = "2256b3e6069092a66862efd5bdd6f7d55f211a1a"
 
 DDD_ESTADOS = {
     '11': 'SP', '12': 'SP', '13': 'SP', '19': 'SP', '21': 'RJ', '22': 'RJ', '24': 'RJ',
