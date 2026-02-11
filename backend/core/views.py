@@ -54,8 +54,7 @@ class ParceiroViewSet(viewsets.ModelViewSet):
     queryset = Parceiro.objects.all().order_by('-score_atual')
     serializer_class = ParceiroSerializer
 
-    # ... dentro da classe ParceiroViewSet ...
-
+    # --- AÇÃO 1: IMPORTAR EXCEL (CARGA DE PARCEIROS) ---
     @action(detail=False, methods=['post'])
     def importar_excel(self, request):
         arquivo = request.FILES.get('file')
@@ -63,22 +62,19 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             return Response({"erro": "Nenhum arquivo enviado."}, status=400)
 
         try:
-            # Lê o Excel e remove espaços em branco dos nomes das colunas
             df = pd.read_excel(arquivo)
-            # Remove espaços antes/depois dos nomes das colunas e coloca tudo em MAIÚSCULO para facilitar a busca
             df.columns = df.columns.str.strip().str.upper()
             
             criados = 0
             atualizados = 0
 
-            # MAPA DE COLUNAS (Da sua Planilha) -> PARA NOME NO SISTEMA
-            # A chave é como está no Excel (MAIÚSCULO PARCIAL), o valor é como salvamos no banco
+            # Mapeamento para garantir robustez
             MAPA_SERVICOS = {
                 "PLANEJAMENTO DE PROJETOS": "Planejamento de Projetos/Incorporação",
                 "ESTUDO DE VIABILIDADE": "Estudo de Viabilidade",
                 "ORÇAMENTO": "Orçamento",
                 "PLANEJAMENTO": "Planejamento",
-                "MONITORAMENTO": "Monitoramento e Controle", # Pega parcial "MONITORAMENTO E CONTROLE"
+                "MONITORAMENTO": "Monitoramento e Controle",
                 "GERENCIAMENTO DE OBRA": "Gerenciamento de Obra",
                 "CONSULTORIA": "Consultoria",
                 "CURSOS": "Cursos",
@@ -94,26 +90,16 @@ class ParceiroViewSet(viewsets.ModelViewSet):
 
             for _, row in df.iterrows():
                 try:
-                    # 1. Dados Básicos (Usando .get para não quebrar se a coluna mudar um pouco)
-                   # ... (dentro do loop for _, row in df.iterrows():)
-                    
-                    # 1. Dados Básicos
                     nome_empresa = str(row.get("EMPRESA", "")).strip()
                     if not nome_empresa or nome_empresa == "nan": continue
 
-                    contato = str(row.get("CONTATO", "")).strip() # Às vezes o nome tá na coluna CONTATO
-                    if contato == "nan": 
-                        # Tenta pegar da coluna CONTATOS (plural) que vi na sua imagem
-                        contato = str(row.get("CONTATOS", "")).strip()
+                    contato = str(row.get("CONTATO", "")).strip()
+                    if contato == "nan": contato = str(row.get("CONTATOS", "")).strip()
                     if contato == "nan": contato = "Não informado"
 
-                    # Pega Email (Coluna 'E-MAIL' ou 'EMAIL')
                     email = str(row.get("E-MAIL", row.get("EMAIL", ""))).strip()
                     if email == "nan": email = ""
 
-                    # Pega Telefone (Muitas vezes está junto com o nome na coluna CONTATOS, mas vamos tentar pegar)
-                    # Se sua planilha tiver uma coluna especifica para telefone, melhor. 
-                    # Na imagem parece que 'CONTATOS' tem tudo misturado. O sistema vai salvar o que tiver lá.
                     telefone = str(row.get("TELEFONE", row.get("CELULAR", ""))).strip()
                     if telefone == "nan": telefone = ""
 
@@ -123,21 +109,25 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                     cidade = str(row.get("CIDADE", row.get("ENDEREÇO", ""))).strip()
                     if cidade == "nan": cidade = ""
 
-                    # ... (continua a lógica dos serviços igual antes) ...
+                    # Lógica de Serviços
+                    servicos_raw = str(row.get("SERVIÇOS PRESTADOS", "")).upper()
+                    servicos_finais = []
+                    for chave, valor_correto in MAPA_SERVICOS.items():
+                        if chave in servicos_raw:
+                            servicos_finais.append(valor_correto)
+                    servicos_str = ", ".join(servicos_finais)
 
-                    # 3. Salva no Banco (ADICIONE email e telefone aqui)
                     obj, created = Parceiro.objects.update_or_create(
                         empresa=nome_empresa,
                         defaults={
                             "contato_nome": contato,
-                            "email": email,      # <--- Novo
-                            "telefone": telefone, # <--- Novo
+                            "email": email,
+                            "telefone": telefone,
                             "estados_atuacao": area_atuacao,
                             "cidade": cidade,
                             "servicos": servicos_str
                         }
                     )
-
                     if created: criados += 1
                     else: atualizados += 1
 
@@ -150,21 +140,19 @@ class ParceiroViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"erro": str(e)}, status=500)
 
-    # --- AÇÃO 1: REGISTRAR PONTOS (CORRIGIDA) ---
+    # --- AÇÃO 2: REGISTRAR PONTOS ---
     @action(detail=True, methods=['post'])
     def registrar_indicacao(self, request, pk=None):
         parceiro = self.get_object()
-        
         try:
             pontos_str = request.data.get('pontos')
-            tipo = request.data.get('tipo', 'Indicação') # Padrão: Indicação
+            tipo = request.data.get('tipo', 'Indicação')
             
             if not pontos_str:
                 return Response({"erro": "Pontos não informados"}, status=400)
 
             pontos_decimal = Decimal(str(pontos_str))
 
-            # 1. Cria histórico
             HistoricoPontuacao.objects.create(
                 parceiro=parceiro,
                 tipo=tipo,
@@ -172,10 +160,9 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 descricao="Lançamento via Painel"
             )
 
-            # 2. Atualiza Parceiro
             parceiro.score_atual += pontos_decimal
             parceiro.ultima_indicacao = timezone.now().date()
-            parceiro.save() # O .save() já chama a lógica de calcular Nível (Ouro/Prata/etc)
+            parceiro.save()
 
             serializer = self.get_serializer(parceiro)
             return Response(serializer.data)
@@ -183,7 +170,7 @@ class ParceiroViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({"erro": str(e)}, status=500)
 
-    # --- AÇÃO 2: AGENTE DE LEADS 10.0 (COMPLETA) ---
+    # --- AÇÃO 3: AGENTE DE LEADS 12.0 (VERSÃO COMPLETA) ---
     @action(detail=False, methods=['post'])
     def qualificar_leads(self, request):
         file_leads = request.FILES.get('file')
@@ -191,30 +178,43 @@ class ParceiroViewSet(viewsets.ModelViewSet):
 
         if not file_leads: return Response({"erro": "Arquivo de leads não enviado"}, status=400)
 
-        # 1. CARREGA PIPEDRIVE
+        # 1. CARREGA PIPEDRIVE (Histórico Completo)
         print("--- Consultando Pipedrive ---")
+        # Nota: Certifique-se que services.py está atualizado para retornar Data e Tipo
         crm_por_cnpj, crm_por_nome = buscar_dados_pipedrive(TOKEN_PIPEDRIVE)
         
-        # 2. CARREGA CLIENTES (MODO PARANÓICO)
-        set_clientes_cnpjs = set()
+        # 2. CARREGA ECOSSISTEMA (PLANILHA NOVA)
+        dados_ecossistema = {} 
         if file_clientes:
             try:
-                df_cli = pd.read_excel(file_clientes, header=None)
-                valores = df_cli.values.flatten()
-                for val in valores:
-                    numeros = limpar_valor_paranoico(val)
+                # Lê considerando cabeçalho na primeira linha
+                df_cli = pd.read_excel(file_clientes)
+                df_cli.columns = df_cli.columns.str.strip()
+                col_cnpj = df_cli.columns[0] # Assume CNPJ na 1ª coluna
+                
+                for _, row in df_cli.iterrows():
+                    raw_cnpj = str(row[col_cnpj])
+                    numeros = limpar_valor_paranoico(raw_cnpj)
                     if 8 <= len(numeros) <= 14:
                         raiz = numeros.zfill(14)[:8]
-                        set_clientes_cnpjs.add(raiz)
-                print(f"Base Clientes: {len(set_clientes_cnpjs)} raízes.")
-            except Exception as e: print(f"Erro Base Clientes: {e}")
+                        dados_cliente = {
+                            'Sienge': row.get('Sienge', ''),
+                            'Prevision': row.get('Prevision', ''),
+                            'CV': row.get('CV', ''),
+                            'Construpoint': row.get('Construpoint', ''),
+                            'MRR Sienge': row.get('MRR Sienge', ''),
+                            'MRR Prevision': row.get('MRR Prevision', ''),
+                            'MRR CV CRM': row.get('MRR CV CRM', '')
+                        }
+                        dados_ecossistema[raiz] = dados_cliente
+                print(f"Base Ecossistema carregada: {len(dados_ecossistema)} registros.")
+            except Exception as e: print(f"Erro ao ler Base Ecossistema: {e}")
 
-        # 3. LEADS
+        # 3. LEADS (ARQUIVO DE ENTRADA)
         try: df = pd.read_excel(file_leads)
         except: return Response({"erro": "Arquivo inválido"}, status=400)
         
-        # Garante colunas mínimas
-        if len(df.columns) < 5: return Response({"erro": "Colunas insuficientes"}, status=400)
+        if len(df.columns) < 5: return Response({"erro": "Colunas insuficientes. Use o modelo padrão."}, status=400)
 
         coluna_empresa = df.columns[4] 
         coluna_telefone = df.columns[2]
@@ -226,7 +226,7 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             empresa_nome = str(row[coluna_empresa]).strip()
             telefone_bruto = str(row[coluna_telefone])
             
-            # --- BUSCA GOOGLE (AGENTE 10.0) ---
+            # --- BUSCA GOOGLE (ENRIQUECIMENTO) ---
             cnpj_matriz_final = ""
             ddd_lead = ''.join(filter(str.isdigit, telefone_bruto))[:2]
             estado_lead = DDD_ESTADOS.get(ddd_lead, "")
@@ -256,7 +256,7 @@ class ParceiroViewSet(viewsets.ModelViewSet):
             except: pass
 
             # --- BRASIL API ---
-            atividade, secundarias = "Não verificada", ""
+            atividade = "Não verificada"
             if cnpj_matriz_final:
                 try:
                     url_brasil = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj_matriz_final}"
@@ -264,34 +264,78 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                     if resp.status_code == 200:
                         dados = resp.json()
                         atividade = dados.get('cnae_fiscal_descricao', 'Não informado')
-                        sec = [i.get('descricao','') for i in dados.get('cnaes_secundarios', [])]
-                        secundarias = "; ".join(sec)[:3000]
                     else: atividade = "CNPJ não encontrado na Base"
                 except: pass
 
-            # --- VALIDAÇÕES ---
-            status_crm, contato_crm, links_crm, status_cliente = "Disponível", "", "", "NÃO"
+            # --- INTELIGÊNCIA PIPEDRIVE (CRUZAMENTO) ---
+            status_crm = "Disponível"
+            contato_crm = ""
+            links_crm = ""
+            
+            hist_erp = set()
+            hist_produto = set()
+            hist_tipologia = set()
+            
+            data_ultimo_card = ""
+            tipo_empresa_ultimo = ""
+            link_ultimo_card = ""
 
-            if cnpj_matriz_final:
-                # CRM
-                if cnpj_matriz_final in crm_por_cnpj:
-                    matches = crm_por_cnpj[cnpj_matriz_final]
-                    status_crm = "EM ABERTO (Match CNPJ)"
-                    contato_crm = ", ".join({m['contato'] for m in matches})
-                    links_crm = " | ".join([m['link'] for m in matches])
-                
-                # CLIENTES
-                if cnpj_matriz_final[:8] in set_clientes_cnpjs:
-                    status_cliente = "SIM - JÁ NA BASE"
-
-            # Fallback Nome
-            if status_crm == "Disponível" and empresa_nome.lower() in crm_por_nome:
+            # 1. Match por CNPJ
+            matches = []
+            if cnpj_matriz_final and cnpj_matriz_final in crm_por_cnpj:
+                matches = crm_por_cnpj[cnpj_matriz_final]
+                status_crm = "ENCONTRADO (CNPJ)"
+            
+            # 2. Match por Nome (Fallback)
+            elif status_crm == "Disponível" and empresa_nome.lower() in crm_por_nome:
                 matches = crm_por_nome[empresa_nome.lower()]
-                status_crm = "EM ABERTO (Match Nome)"
-                contato_crm = ", ".join({m['contato'] for m in matches})
-                links_crm = " | ".join([m['link'] for m in matches])
+                status_crm = "ENCONTRADO (Nome)"
 
-            # --- SITE e TIPOLOGIA ---
+            if matches:
+                # Ordena do mais recente para o mais antigo
+                # Garante que o campo data_criacao exista (veja services.py)
+                matches.sort(key=lambda x: x.get('data_criacao', ''), reverse=True)
+                
+                mais_recente = matches[0]
+                data_raw = mais_recente.get('data_criacao', '')
+                data_ultimo_card = data_raw[:10] if data_raw else ""
+                tipo_empresa_ultimo = mais_recente.get('tipo_empresa', '')
+                link_ultimo_card = mais_recente.get('link', '')
+
+                # Verifica se TEM ABERTO
+                tem_aberto = any(m.get('status') == 'open' for m in matches)
+                if tem_aberto:
+                    status_crm = "EM ABERTO (Não Prospectar)"
+                else:
+                    status_crm = f"JÁ NEGOCIADO (Último: {data_ultimo_card})"
+
+                contato_crm = ", ".join({m['contato'] for m in matches if m['contato'] != "Sem Contato"})
+                links_crm = " | ".join([m['link'] for m in matches])
+                
+                # Acumula inteligência
+                for m in matches:
+                    if m.get('erp'): hist_erp.add(m['erp'])
+                    if m.get('produto'): hist_produto.add(m['produto'])
+                    if m.get('tipologia'): hist_tipologia.add(m['tipologia'])
+
+            # --- DADOS ECOSSISTEMA ---
+            eco_sienge = ""
+            eco_prevision = ""
+            eco_cv = ""
+            eco_mrr_sienge = ""
+            eco_mrr_prevision = ""
+            
+            if cnpj_matriz_final:
+                raiz_cnpj = cnpj_matriz_final[:8]
+                if raiz_cnpj in dados_ecossistema:
+                    info_eco = dados_ecossistema[raiz_cnpj]
+                    eco_sienge = info_eco.get('Sienge', '')
+                    eco_prevision = info_eco.get('Prevision', '')
+                    eco_cv = info_eco.get('CV', '')
+                    eco_mrr_sienge = info_eco.get('MRR Sienge', '')
+                    eco_mrr_prevision = info_eco.get('MRR Prevision', '')
+
+            # --- SITE e TIPOLOGIA WEB ---
             site_final = "Não encontrado"
             try:
                 p_site = json.dumps({"q": f"{empresa_nome} site oficial", "num": 1})
@@ -299,23 +343,36 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 if r_site.json().get("organic"): site_final = r_site.json().get("organic")[0].get("link")
             except: pass
 
-            tipologia = "nao_identificado"
+            tipologia_site = "nao_identificado"
             txt = (empresa_nome + " " + site_final + " " + atividade).lower()
-            if any(x in txt for x in ['lote', 'bairro', 'urbanismo']): tipologia = "loteamento"
-            elif any(x in txt for x in ['edific', 'residencial', 'incorp']): tipologia = "vertical"
-            elif any(x in txt for x in ['industria', 'galpao']): tipologia = "industrial"
+            if any(x in txt for x in ['lote', 'bairro', 'urbanismo']): tipologia_site = "loteamento"
+            elif any(x in txt for x in ['edific', 'residencial', 'incorp']): tipologia_site = "vertical"
+            elif any(x in txt for x in ['industria', 'galpao']): tipologia_site = "industrial"
 
+            # --- PREENCHIMENTO EXCEL FINAL ---
             df.at[index, 'CNPJ Encontrado'] = cnpj_matriz_final
             df.at[index, 'Atividade Principal'] = atividade
-            df.at[index, 'Atividades Secundarias'] = secundarias
             df.at[index, 'Site'] = site_final
-            df.at[index, 'Tipologia'] = tipologia
-            df.at[index, 'Status Cliente'] = status_cliente
+            
+            # CRM Inteligente
             df.at[index, 'Status CRM'] = status_crm
-            df.at[index, 'Contato no CRM'] = contato_crm
-            df.at[index, 'Link Card Pipedrive'] = links_crm
+            df.at[index, 'Data Último Card'] = data_ultimo_card
+            df.at[index, 'Tipo Empresa (CRM)'] = tipo_empresa_ultimo
+            df.at[index, 'Link Último Card'] = link_ultimo_card
+            
+            df.at[index, 'Contato CRM'] = contato_crm
+            df.at[index, 'Histórico ERP'] = ", ".join(hist_erp)
+            df.at[index, 'Histórico Produtos'] = ", ".join(hist_produto)
+            
+            # Ecossistema
+            df.at[index, 'Status Sienge'] = eco_sienge
+            df.at[index, 'MRR Sienge'] = eco_mrr_sienge
+            df.at[index, 'Status Prevision'] = eco_prevision
+            df.at[index, 'MRR Prevision'] = eco_mrr_prevision
+            
+            df.at[index, 'Tipologia (Web)'] = tipologia_site
 
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = 'attachment; filename=leads_qualificados_v10.xlsx'
+        response['Content-Disposition'] = 'attachment; filename=leads_super_qualificados.xlsx'
         df.to_excel(response, index=False)
         return response
