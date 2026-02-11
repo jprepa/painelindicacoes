@@ -10,7 +10,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Parceiro, HistoricoPontuacao
 from .serializers import ParceiroSerializer
-# IMPORTANTE: Importe a nova função pontual
+# IMPORTAÇÃO CORRIGIDA (Isso resolve o erro do log)
 from .services import consultar_pipedrive_pontual 
 
 # --- CONFIGURAÇÕES ---
@@ -23,7 +23,7 @@ DDD_ESTADOS = {
     '51': 'RS', '61': 'DF', '62': 'GO', '71': 'BA', '81': 'PE', '91': 'PA'
 }
 
-# --- FUNÇÕES AUXILIARES (MANTIDAS) ---
+# --- FUNÇÕES AUXILIARES ---
 def limpar_valor_paranoico(valor):
     if pd.isna(valor): return ""
     s_val = str(valor).strip()
@@ -56,16 +56,77 @@ class ParceiroViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def importar_excel(self, request):
-        # ... (CÓDIGO DE IMPORTAÇÃO DE PARCEIROS MANTIDO IGUAL) ...
-        # (Omitido aqui para focar na solução, mas mantenha o seu código original desta função)
-        return Response({"mensagem": "Função mantida"})
+        arquivo = request.FILES.get('file')
+        if not arquivo: return Response({"erro": "Nenhum arquivo enviado."}, status=400)
+        try:
+            df = pd.read_excel(arquivo)
+            df.columns = df.columns.str.strip().str.upper()
+            criados = 0
+            atualizados = 0
+            MAPA_SERVICOS = {
+                "PLANEJAMENTO DE PROJETOS": "Planejamento de Projetos/Incorporação",
+                "ESTUDO DE VIABILIDADE": "Estudo de Viabilidade",
+                "ORÇAMENTO": "Orçamento",
+                "PLANEJAMENTO": "Planejamento",
+                "MONITORAMENTO": "Monitoramento e Controle",
+                "GERENCIAMENTO DE OBRA": "Gerenciamento de Obra",
+                "CONSULTORIA": "Consultoria",
+                "CURSOS": "Cursos",
+                "BIM": "BIM",
+                "MENTORIA": "Mentoria Lean",
+                "GESTÃO DE PESSOAS": "Gestão de Pessoas",
+                "PROJETOS COMPLE": "Projetos Complementares",
+                "QUALIDADE": "Qualidade",
+                "GERENCIAMENTO DE PROJETO": "Gerenciamento de Projeto/Contrato",
+                "GERENCIAMENTO FISICO": "Gerenciamento Físico-Financeiro",
+                "SUSTENTÁVEIS": "Soluções Sustentáveis"
+            }
+            for _, row in df.iterrows():
+                try:
+                    nome_empresa = str(row.get("EMPRESA", "")).strip()
+                    if not nome_empresa or nome_empresa == "nan": continue
+                    contato = str(row.get("CONTATO", "")).strip()
+                    if contato == "nan": contato = str(row.get("CONTATOS", "")).strip()
+                    if contato == "nan": contato = "Não informado"
+                    email = str(row.get("E-MAIL", row.get("EMAIL", ""))).strip()
+                    if email == "nan": email = ""
+                    telefone = str(row.get("TELEFONE", row.get("CELULAR", ""))).strip()
+                    if telefone == "nan": telefone = ""
+                    area_atuacao = str(row.get("AREA DE ATUAÇÃO", row.get("AREA DE ATUACAO", row.get("ESTADO", "")))).strip()
+                    if area_atuacao == "nan": area_atuacao = ""
+                    cidade = str(row.get("CIDADE", row.get("ENDEREÇO", ""))).strip()
+                    if cidade == "nan": cidade = ""
+                    servicos_raw = str(row.get("SERVIÇOS PRESTADOS", "")).upper()
+                    servicos_finais = []
+                    for chave, valor_correto in MAPA_SERVICOS.items():
+                        if chave in servicos_raw: servicos_finais.append(valor_correto)
+                    servicos_str = ", ".join(servicos_finais)
+                    obj, created = Parceiro.objects.update_or_create(
+                        empresa=nome_empresa,
+                        defaults={ "contato_nome": contato, "email": email, "telefone": telefone, "estados_atuacao": area_atuacao, "cidade": cidade, "servicos": servicos_str }
+                    )
+                    if created: criados += 1
+                    else: atualizados += 1
+                except: continue
+            return Response({"mensagem": f"Sucesso! {criados} novos, {atualizados} atualizados."})
+        except Exception as e: return Response({"erro": str(e)}, status=500)
 
     @action(detail=True, methods=['post'])
     def registrar_indicacao(self, request, pk=None):
-        # ... (CÓDIGO DE PONTOS MANTIDO IGUAL) ...
-        return Response({"mensagem": "Função mantida"})
+        parceiro = self.get_object()
+        try:
+            pontos_str = request.data.get('pontos')
+            tipo = request.data.get('tipo', 'Indicação')
+            if not pontos_str: return Response({"erro": "Pontos não informados"}, status=400)
+            pontos_decimal = Decimal(str(pontos_str))
+            HistoricoPontuacao.objects.create(parceiro=parceiro, tipo=tipo, pontos=pontos_decimal, descricao="Lançamento via Painel")
+            parceiro.score_atual += pontos_decimal
+            parceiro.ultima_indicacao = timezone.now().date()
+            parceiro.save()
+            return Response(self.get_serializer(parceiro).data)
+        except Exception as e: return Response({"erro": str(e)}, status=500)
 
-    # --- AGENTE DE LEADS 17.0 (MODO SNIPER - BAIXA MEMÓRIA) 🍃🎯 ---
+    # --- AGENTE DE LEADS 18.0 (LEVE, SNIPER E COM FÓRMULAS) ---
     @action(detail=False, methods=['post'])
     def qualificar_leads(self, request):
         file_leads = request.FILES.get('file')
@@ -129,19 +190,11 @@ class ParceiroViewSet(viewsets.ModelViewSet):
                 except: pass
 
             # --- C. PIPEDRIVE (MODO SNIPER) ---
-            # Aqui chamamos a função que busca SÓ ESTA EMPRESA
-            # Isso garante que a memória RAM nunca encha
-            
+            # Chama a função nova, passando apenas o CNPJ/Nome desta linha
             dados_pipe = consultar_pipedrive_pontual(TOKEN_PIPEDRIVE, cnpj_matriz_final, empresa_nome)
             
-            # Prepara valores padrão caso não ache nada
-            status_crm = "Disponível"
-            data_card = ""
-            tipo_emp = ""
-            link_card = ""
-            contato_crm = ""
-            hist_erp = ""
-            hist_prod = ""
+            status_crm, data_card, tipo_emp = "Disponível", "", ""
+            link_card, contato_crm, hist_erp, hist_prod = "", "", "", ""
 
             if dados_pipe:
                 status_crm = dados_pipe['status_crm']
@@ -208,7 +261,7 @@ class ParceiroViewSet(viewsets.ModelViewSet):
         # --- EXPORTAÇÃO ---
         df_final = pd.DataFrame(output_rows)
         response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = 'attachment; filename=leads_inteligentes_v17.xlsx'
+        response['Content-Disposition'] = 'attachment; filename=leads_inteligentes_v18.xlsx'
         
         with pd.ExcelWriter(response, engine='xlsxwriter') as writer:
             df_final.to_excel(writer, sheet_name='Leads Qualificados', index=False)
